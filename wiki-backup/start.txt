@@ -1,0 +1,20 @@
+====== Create your own TLA⁺ tools ======
+
+Building your own simplified parsing, model-checking, and even proof-checking tools for TLA⁺ is the best way to prepare yourself for serious work on the existing TLA⁺ tools.
+This process will give you a strong understanding of how & why the tools are written the way they are.
+Even though your solution will not match their workings line-for-line, you'll learn to recognize the tricky parts and can compare & contrast your own approach with the existing implementation.
+You'll also be able to rapidly prototype new capabilities in your own codebase, an experience that will guide you as you interface with the complexity of an industrial-strength implementation.
+While writing your own TLA⁺ tools may seem like a tall order, it is a proven strategy for smoothing out the otherwise-near-vertical learning curve of contributing to tooling for any formal language.
+Do not think you have to fully flesh out your implementation before you can begin working on the existing TLA⁺ tools!
+The purpose of this exercise is to acquire specific knowledge; often you will expand your implementation in tandem with your work on the existing tools, each informing the other.
+Your implementation will grow with you over time.
+
+This tutorial series strives to build a culture of demystification, where knowledge of TLA⁺ inner workings is not arcane but commonplace.
+The tools do not use complicated algorithms; their workings can all be understood by any software engineer.
+Language tooling (for any formal language) is also a somewhat blessed area of software development in that specifications of expected program behavior are relatively complete and unambiguous.
+Thus, with enough living knowledge (and comprehensive test batteries) we can confidently make changes to code long after its original authors have moved on; the challenges of legacy code and technical debt can be made tractable.
+
+Approaching TLA⁺ from the perspective of an implementer will also bring you better knowledge of how to use TLA⁺ itself.
+Developing an intuition of what TLC is doing when it model-checks your spec will enable you to write specifications that make better use of its capabilities.
+And, if you reach the edge of those capabilities - well, you're well-placed to extend TLC to handle it!
+
