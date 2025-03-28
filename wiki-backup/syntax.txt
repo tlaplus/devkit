@@ -1,0 +1,221 @@
+====== Parsing TLA⁺ Syntax ======
+
+TLA⁺ is a large, complicated, and ambiguous language that takes a huge amount of work to parse correctly & completely.
+This is assisted by [[https://github.com/tlaplus/rfcs/tree/2a772d9dd11acec5d7dedf30abfab91a49de48b8/language_standard/tests/tlaplus_syntax|a comprehensive test corpus]] exercising the language's nooks & crannies, but here we will make life easy on ourselves.
+This tutorial only uses a minimal subset of TLA⁺ syntax, just enough to handle [[https://github.com/tlaplus/Examples/blob/37236893f14527b4fc9f3963891eb2316c3de62e/specifications/DieHard/DieHard.tla|the classic DieHard spec]].
+While that may seem limiting, this tutorial tries to focus on the difficult & interesting parts of parsing the language instead of more mundane drudgework like handling all hundred-some user-definable operator symbols.
+You are encouraged to extend this minimal core as you wish; language tooling is best developed incrementally!
+Slowly filling in the details of this rough language sketch has a satisfying meditative aspect.
+
+Here is what our minimal language subset includes:
+  * The ''---- MODULE Name ----'' header and ''===='' footer
+  * Named parameterized operator definitions like ''op == ...'' and ''op(x, y, z) == ...''
+  * Comments, both single-line like ''\* comment text'' and nestable multi-line like ''(* comment text *)''
+  * Declaration of ''VARIABLES''
+  * Finite set literals, like ''{1, 2, 3, 4, 5}''
+  * The ''ENABLED'', negative (''-x''), and logical negation (''~'') prefix operators
+  * Some infix operators: ''\in'', ''='', ''+'', ''-'', and ''<''
+  * The variable-priming suffix operator
+  * Parentheses to control expression grouping
+  * Vertically-aligned conjunction & disjunction lists
+  * The ''IF''/''THEN''/''ELSE'' construct
+  * Natural numbers like ''0'', ''5'', ''10'', etc.
+  * Boolean values ''TRUE'' and ''FALSE''
+
+As outlined above, you are free to add missing features (or even your own invented features!) as you wish.
+
+==== Preparation ====
+
+Read part I (the first three chapters) of free online textbook //[[https://craftinginterpreters.com/contents.html|Crafting Interpreters]]// by Robert Nystrom.
+We will be closely following the material in this book, modifying it to our uses.
+The first two chapters are a nice introduction and overview of language implementation generally.
+Chapter three specifies a toy language called Lox, to be used as an object of study for the remainder of the book.
+Our minimal TLA⁺ subset has some similarity to Lox with regard to expressions involving integers and booleans, but also differences - you can skip the section on closures (unless you want to implement higher-order operator parameters yourself) and the section on classes.
+What's important is that it's similar enough for all the fundamentals to still apply!
+
+==== Section 4.1: The Interpreter Framework ====
+
+[[https://craftinginterpreters.com/a-tree-walk-interpreter.html|Part II:: A Tree-Walk Interpreter]] is where we start to merge with and modify the given code.
+Everything in [[https://craftinginterpreters.com/scanning.html#the-interpreter-framework|section 4.1]] can be left unchanged from what's given, although of course it makes sense to change some of the names from "Lox" to "TlaPlus" or similar.
+You should thus have followed along and arrived at something similar to the below file ''TlaPlus.java''.
+Notable differences from code given in the book are highlighted, a practice that will be used for the remainder of this tutorial - with the exception of classes that are almost entirely changed:
+
+<code java [enable_line_numbers="true",highlight_lines_extra="1,11"]>
+package com.craftinginterpreters.tla;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.List;
+
+public class TlaPlus {
+  static boolean hadError = false;
+
+  public static void main(String[] args) throws IOException {
+    if (args.length > 1) {
+      System.out.println("Usage: jlox [script]");
+      System.exit(64);
+    } else if (args.length == 1) {
+      runFile(args[0]);
+    } else {
+      runPrompt();
+    }
+  }
+
+  private static void runFile(String path) throws IOException {
+    byte[] bytes = Files.readAllBytes(Paths.get(path));
+    run(new String(bytes, Charset.defaultCharset()));
+
+    // Indicate an error in the exit code.
+    if (hadError) System.exit(65);
+  }
+
+  private static void runPrompt() throws IOException {
+    InputStreamReader input = new InputStreamReader(System.in);
+    BufferedReader reader = new BufferedReader(input);
+
+    for (;;) {
+      System.out.print("> ");
+      String line = reader.readLine();
+      if (line == null) break;
+      run(line);
+      hadError = false;
+    }
+  }
+
+  private static void run(String source) {
+    Scanner scanner = new Scanner(source);
+    List<Token> tokens = scanner.scanTokens();
+
+    // For now, just print the tokens.
+    for (Token token : tokens) {
+      System.out.println(token);
+    }
+  }
+
+  static void error(int line, String message) {
+    report(line, "", message);
+  }
+
+  private static void report(int line, String where,
+                             String message) {
+    System.err.println(
+        "[line " + line + "] Error" + where + ": " + message);
+    hadError = true;
+  }
+}
+</code>
+
+==== Section 4.2: Lexemes and Tokens ====
+
+The ''TokenType'' class in [[https://craftinginterpreters.com/scanning.html#lexemes-and-tokens|section 4.2]] is our first major departure from the book.
+Instead of Lox tokens, we use the atomic components of our minimal TLA⁺ language subset defined above.
+Adapting the snippet in [[https://craftinginterpreters.com/scanning.html#token-type|section 4.2.1]] we get:
+
+<code java [enable_line_numbers="true"]>
+package com.craftinginterpreters.tla;
+
+enum TokenType {
+  // Single-character tokens.
+  LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE,
+  COMMA, MINUS, PLUS, EQUALS, LESS_THAN, NEGATION, PRIME
+
+  // One or two character tokens.
+  AND, OR, DEF_EQ, IN
+
+  // Literals.
+  IDENTIFIER, NAT_NUMBER, TRUE, FALSE,
+
+  // Keywords.
+  VARIABLES, ENABLED, IF, THEN, ELSE,
+  SINGLE_LINE, MODULE, DOUBLE_LINE
+
+  EOF
+}
+</code>
+
+There is a very minor design decision here, of the type encountered innumerable times when writing a parser.
+TLA⁺ includes boolean values ''TRUE'' and ''FALSE'', but we don't //need// to give them their own token types; they can be parsed as ordinary ''IDENTIFIER'' tokens then later resolved to the built-in operators ''TRUE'' and ''FALSE''.
+However, since we are writing our interpreter in Java and Java has primitive boolean literals, it is convenient to add specialized tokens for ''TRUE'' and ''FALSE'' so we can resolve them to primitive Java values on the spot.
+The existing TLA⁺ tools do not take this approach, and instead later resolve the identifiers ''TRUE'' and ''FALSE'' from a set of built-in operators.
+This sort of works-either-way design dilemma occurs often, and we will see it again when trying to decide whether to disallow a snippet of invalid TLA⁺ at the syntactic or semantic level.
+
+In [[https://craftinginterpreters.com/scanning.html#location-information|section 4.2.3]], we make one //very critical// addition to the information about each token tracked in the ''Token'' class: the token's start column.
+This will come in useful when parsing vertically-aligned conjunction & disjunction lists.
+
+<code java [enable_line_numbers="true",highlight_lines_extra="8,10,15"]>
+package com.craftinginterpreters.tla;
+
+class Token {
+  final TokenType type;
+  final String lexeme;
+  final Object literal;
+  final int line;
+  final int column;
+
+  Token(TokenType type, String lexeme, Object literal, int line, int column) {
+    this.type = type;
+    this.lexeme = lexeme;
+    this.literal = literal;
+    this.line = line;
+    this.column = column;
+  }
+
+  public String toString() {
+    return type + " " + lexeme + " " + literal;
+  }
+}
+</code>
+
+==== Section 4.4: The Scanner Class ====
+
+We now move on to the very important ''Scanner'' class in [[https://craftinginterpreters.com/scanning.html#the-scanner-class|section 4.4]].
+Here we again make several logical modifications.
+The first is to track the column in addition to the line, mirroring our addition to the ''Token'' class:
+
+<code java [enable_line_numbers="true",highlight_lines_extra="1,8,16,29"]>
+package com.craftinginterpreters.tla;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static com.craftinginterpreters.tla.TokenType.*;
+
+class Scanner {
+  private final String source;
+  private final List<Token> tokens = new ArrayList<>();
+  private int start = 0;
+  private int current = 0;
+  private int line = 1;
+  private int column = 0;
+
+  Scanner(String source) {
+    this.source = source;
+  }
+
+  List<Token> scanTokens() {
+    while (!isAtEnd()) {
+      // We are at the beginning of the next lexeme.
+      start = current;
+      scanToken();
+    }
+
+    tokens.add(new Token(EOF, "", null, line, column));
+    return tokens;
+  }
+
+  private boolean isAtEnd() {
+    return current >= source.length();
+  }
+}
+</code>
+
+==== Section 4.4: Recognizing Lexemes ====
+
+
+

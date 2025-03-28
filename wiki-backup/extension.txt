@@ -1,0 +1,14 @@
+Notably, the following will not be covered in this tutorial:
+  * PlusCal
+  * Declaring ''CONSTANTS''
+  * Nesting modules or importing other modules through ''EXTENDS'' or ''INSTANCE''
+  * Set map & set filter syntax, like ''{e \in S : P(e)}''
+  * Universal & existential quantification, like ''\E e \in S : P(e)''
+  * The ''CHOOSE'' operator
+  * Functions, like ''[x \in Nat |-> 2*x]'' or the function ''EXCEPT'' syntax
+  * Sequences, like ''<<1, 2, 3, 4, 5>>''
+  * The ''LET''/''IN'' construct
+  * Temporal- or action-level operators like ''[]'', ''<>'', ''[A]_v'', or ''WF_v(A)''
+  * Higher-order operator parameters like ''op(F(_), x) == ...''
+  * The TLA⁺ proof language
+
