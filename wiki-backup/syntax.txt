@@ -10,7 +10,7 @@ Slowly filling in the details of this rough language sketch has a satisfying med
 Here is what our minimal language subset includes:
   * The ''---- MODULE Name ----'' header and ''===='' footer
   * Named parameterized operator definitions like ''op == ...'' and ''op(x, y, z) == ...''
-  * Comments, both single-line like ''\* comment text'' and nestable multi-line like ''(* comment text *)''
+  * Single-line comments like ''\* comment text''
   * Declaration of ''VARIABLES''
   * Finite set literals, like ''{1, 2, 3, 4, 5}''
   * The ''ENABLED'', negative (''-x''), and logical negation (''~'') prefix operators
@@ -33,12 +33,17 @@ Chapter three specifies a toy language called Lox, to be used as an object of st
 Our minimal TLA⁺ subset has some similarity to Lox with regard to expressions involving integers and booleans, but also differences - you can skip the section on closures (unless you want to implement higher-order operator parameters yourself) and the section on classes.
 What's important is that it's similar enough for all the fundamentals to still apply!
 
+Code snippets are shown often in this tutorial.
+When a snippet is similar to code given in the book with the exception of a few lines, the differing lines will be highlighted.
+Highlighting is also used to identify //new// code being added to a large section of code given previously, with surrounding lines included for context.
+Sometimes the code given here is so different from that provided by the book that highlighting is simply ommitted to reduce visual noise.
+A parenthetical will specify the meaning of highlighted code when ambiguous.
+
 ==== Section 4.1: The Interpreter Framework ====
 
 [[https://craftinginterpreters.com/a-tree-walk-interpreter.html|Part II:: A Tree-Walk Interpreter]] is where we start to merge with and modify the given code.
 Everything in [[https://craftinginterpreters.com/scanning.html#the-interpreter-framework|section 4.1]] can be left unchanged from what's given, although of course it makes sense to change some of the names from "Lox" to "TlaPlus" or similar.
-You should thus have followed along and arrived at something similar to the below file ''TlaPlus.java''.
-Notable differences from code given in the book are highlighted, a practice that will be used for the remainder of this tutorial - with the exception of classes that are almost entirely changed:
+You should thus have followed along and arrived at something similar to the below file ''TlaPlus.java'':
 
 <code java [enable_line_numbers="true",highlight_lines_extra="1,11"]>
 package com.craftinginterpreters.tla;
@@ -121,16 +126,16 @@ package com.craftinginterpreters.tla;
 enum TokenType {
   // Single-character tokens.
   LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE,
-  COMMA, MINUS, PLUS, EQUALS, LESS_THAN, NEGATION, PRIME
+  COMMA, MINUS, PLUS, LESS_THAN, NEGATION, PRIME
 
   // One or two character tokens.
-  AND, OR, DEF_EQ, IN
+  AND, OR, EQUALS, DEF_EQ,
 
   // Literals.
   IDENTIFIER, NAT_NUMBER, TRUE, FALSE,
 
   // Keywords.
-  VARIABLES, ENABLED, IF, THEN, ELSE,
+  VARIABLES, ENABLED, IF, THEN, ELSE, IN,
   SINGLE_LINE, MODULE, DOUBLE_LINE
 
   EOF
@@ -173,8 +178,7 @@ class Token {
 ==== Section 4.4: The Scanner Class ====
 
 We now move on to the very important ''Scanner'' class in [[https://craftinginterpreters.com/scanning.html#the-scanner-class|section 4.4]].
-Here we again make several logical modifications.
-The first is to track the column in addition to the line, mirroring our addition to the ''Token'' class:
+Our first modification to the code given in the book is to track the column in addition to the line, mirroring our addition to the ''Token'' class:
 
 <code java [enable_line_numbers="true",highlight_lines_extra="1,8,16,29"]>
 package com.craftinginterpreters.tla;
@@ -215,7 +219,306 @@ class Scanner {
 }
 </code>
 
-==== Section 4.4: Recognizing Lexemes ====
+==== Section 4.5: Recognizing Lexemes ====
 
+[[https://craftinginterpreters.com/scanning.html#recognizing-lexemes|Section 4.5]] finally gets around to actually handling text input!
+Of course, our unambiguous single-character lexing code in ''scanToken'' has some differences (including the removal of ''DOT'', ''SEMICOLON'', and ''STAR''); we move the lexing of ''-'' to the bottom for reasons that will become apparent later.
+Note also that we increment the column position in ''advance()'':
 
+<code java [enable_line_numbers="true",highlight_lines_extra="10,11,12,13,15,21",start_line_numbers_at=37]>
+  private void scanToken() {
+    char c = advance();
+    switch (c) {
+      case '(': addToken(LEFT_PAREN); break;
+      case ')': addToken(RIGHT_PAREN); break;
+      case '{': addToken(LEFT_BRACE); break;
+      case '}': addToken(RIGHT_BRACE); break;
+      case ',': addToken(COMMA); break;
+      case '+': addToken(PLUS); break;
+      case '<': addToken(LESS_THAN); break;
+      case '~': addToken(NEGATION); break;
+      case '\'': addToken(PRIME); break;
+      case '-': addToken(MINUS); break;
+      default:
+        TlaPlus.error(line, "Unexpected character.");
+        break;
+    }
+  }
+
+  private char advance() {
+    column++;
+    return source.charAt(current++);
+  }
+
+  private void addToken(TokenType type) {
+    addToken(type, null);
+  }
+
+  private void addToken(TokenType type, Object literal) {
+    String text = source.substring(start, current);
+    tokens.add(new Token(type, text, literal, line, column));
+  }
+}
+</code>
+
+Moving on to lexing tokens of one or two characters, the differences widen considerably; we want to lex ''='', ''=='', ''/\'', and ''\/'':
+
+<code java [enable_line_numbers="true",highlight_lines_extra="2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18",start_line_numbers_at=49]>
+      case '-': addToken(MINUS); break;
+      case '=':
+        addToken(match('=') ? DEF_EQ : EQUALS);
+        break;
+      case '\\':
+        if (match('/')) {
+          addToken(OR);
+        } else {
+          TlaPlus.error(line, "Unexpected character.");
+        }
+        break;
+      case '/':
+        if (match('\\')) {
+          addToken(AND);
+        } else {
+          TlaPlus.error(line, "Unexpected character.");
+        }
+        break;
+      default:
+        TlaPlus.error(line, "Unexpected character.");
+        break;
+</code>
+
+Be sure to include the ''match(char)'' helper method given in the text; again we have to update the value of ''column'' when advancing:
+
+<code java [highlight_lines_extra="5"]>
+  private boolean match(char expected) {
+    if (isAtEnd()) return false;
+    if (source.charAt(current) != expected) return false;
+
+    column++;
+    current++;
+    return true;
+  }
+</code>
+
+==== Section 4.6: Longer Lexemes ====
+
+In [[https://craftinginterpreters.com/scanning.html#longer-lexemes|section 4.6]] we learn how to handle lexemes of longer or unlimited length.
+Let's begin with single-line comments, which in TLA⁺ start with ''\*'' (new code highlighted):
+
+<code java [enable_line_numbers="true",highlight_lines_extra="4,5,6",start_line_numbers_at=53]>
+      case '\\':
+        if (match('/')) {
+          addToken(OR);
+        } else if (match('*')) {
+          // A comment goes until the end of the line.
+          while (peek() != '\n' && !isAtEnd()) advance();
+        } else {
+          TlaPlus.error(line, "Unexpected character.");
+        }
+        break;
+</code>
+
+This uses the ''peek()'' helper:
+
+<code java>
+  private char peek() {
+    if (isAtEnd()) return '\0';
+    return source.charAt(current);
+  }
+</code>
+
+Also add the code to skip whitespace; importantly, when encountering a newline character we reset the ''column'' counter to zero:
+
+<code java [enable_line_numbers="true",highlight_lines_extra="10",start_line_numbers_at=69]>
+      break;
+
+      case ' ':
+      case '\r':
+      case '\t':
+        // Ignore whitespace.
+        break;
+
+      case '\n':
+        column = 0;
+        line++;
+        break;
+
+      default:
+        TlaPlus.error(line, "Unexpected character.");
+        break;
+</code>
+
+We aren't supporting strings (unless you want to go the extra mile) so next up is numbers:
+
+<code java [enable_line_numbers="true",highlight_lines_extra="2,3,4,5,6",start_line_numbers_at=82]>
+      default:
+        if (isDigit(c)) {
+          number();
+        } else {
+          TlaPlus.error(line, "Unexpected character.");
+        }
+        break;
+</code>
+
+Include the ''isDigit(char)'' helper:
+
+<code java>
+  private boolean isDigit(char c) {
+    return c >= '0' && c <= '9';
+  }
+</code>
+
+We're only handling whole natural numbers, no decimals, so our ''number()'' method is much simpler; however, include the ''peekNext()'' helper anyway since it's introduced here and will be used later:
+
+<code java>
+  private void number() {
+    while (isDigit(peek())) advance();
+    addToken(NAT_NUMBER,
+        Integer.parseInt(source.substring(start, current)));
+  }
+
+  private char peekNext() {
+    if (current + 1 >= source.length()) return '\0';
+    return source.charAt(current + 1);
+  }
+</code>
+
+==== Section 4.7: Reserved Words and Identifiers ====
+
+In [[https://craftinginterpreters.com/scanning.html#reserved-words-and-identifiers|section 4.7]] we learn to lex general identifiers; start by adding a case to the ''scanToken()'' method:
+
+<code java [enable_line_numbers="true",highlight_lines_extra="4,5,6",start_line_numbers_at=82]>
+      default:
+        if (isDigit(c)) {
+          number();
+        } else if (isAlpha(c)) {
+          identifier();
+        } else {
+          TlaPlus.error(line, "Unexpected character.");
+        }
+
+</code>
+
+Then include these helper methods:
+
+<code java>
+  private void identifier() {
+    while (isAlphaNumeric(peek())) advance();
+
+    addToken(IDENTIFIER);
+  }
+
+  private boolean isAlpha(char c) {
+    return (c >= 'a' && c <= 'z') ||
+           (c >= 'A' && c <= 'Z') ||
+            c == '_';
+  }
+
+  private boolean isAlphaNumeric(char c) {
+    return isAlpha(c) || isDigit(c);
+  }
+</code>
+
+Note that this is //close// to TLA⁺ identifier rules, but not quite correct.
+TLA⁺ identifiers can be any sequence of alphanumeric ASCII characters including underscore, as long as at least one character in the sequence is alphabetical (''[a-zA-Z]'').
+You are encouraged to modify your code to match this constraint, but for simplicity we'll stick with the close-enough identifier logic given in the book.
+Fixing it requires modifying the number lexing logic from the previous section.
+
+Now let's define our keyword map:
+
+<code java>
+  private static final Map<String, TokenType> keywords;
+
+  static {
+    keywords = new HashMap<>();
+    keywords.put("ELSE",       ELSE);
+    keywords.put("ENABLED",    ELSE);
+    keywords.put("FALSE",      FALSE);
+    keywords.put("IF",         IF);
+    keywords.put("MODULE",     MODULE);
+    keywords.put("THEN",       THEN);
+    keywords.put("TRUE",       TRUE);
+    keywords.put("VARIABLE",   VARIABLES);
+    keywords.put("VARIABLES",  VARIABLES);
+  }
+</code>
+
+Then update our implementation of ''identifier()'':
+
+<code java [enable_line_numbers="true",highlight_lines_extra="4,5,6,7"]>
+  private void identifier() {
+    while (isAlphaNumeric(peek())) advance();
+
+    String text = source.substring(start, current);
+    TokenType type = keywords.get(text);
+    if (type == null) type = IDENTIFIER;
+    addToken(type);
+  }
+</code>
+
+We're nearly done!
+There are only three more troublesome TLA⁺-specific lexemes to handle:
+  * ''IN'', for the string ''\in''
+  * ''SINGLE_LINE'', for a sequence ''----'' of four or greater ''-''
+  * ''DOUBLE_LINE'', for a sequence ''===='' of four or greater ''=''
+
+ All of these require us to go back and modify ''scanToken()'' with some fairly inelegant logic:
+
+<code java [enable_line_numbers="true",highlight_lines_extra="1,2,3,4,5,6,7,8,9,10,11,12,14,15,16,17,18,19,20,21,22,23,31,32",start_line_numbers_at="49"]>
+      case '-':
+        if (match('-')) {
+          if ('-' == peek() && '-' == peekNext()) {
+            while (match('-')) advance();
+            addToken(SINGLE_LINE);
+          } else {
+            TlaPlus.error(line, "Unexpected character.");
+          }
+        } else {
+          addToken(MINUS);
+        }
+        break;
+      case '=':
+        if (match('=')) {
+          if ('=' == peek() && '=' == peekNext()) {
+            while (match('=')) advance();
+            addToken(DOUBLE_LINE);
+          } else {
+            addToken(DEF_EQ);
+          }
+        } else {
+          addToken(EQUALS);
+        }
+        break;
+      case '\\':
+        if (match('/')) {
+          addToken(OR);
+        } else if (match('*')) {
+          // A comment goes until the end of the line.
+          while (peek() != '\n' && !isAtEnd()) advance();
+        } else if (match('i') && match('n')) {
+          addToken(IN);
+        } else {
+          TlaPlus.error(line, "Unexpected character.");
+        }
+        break;
+</code>
+
+Consider this a glimpse into what awaits you if you try to properly lex the entire TLA⁺ language.
+It is not for the faint of heart.
+
+For now, we are done lexing our minimal TLA⁺ subset.
+Give it a whirl!
+Running your Java program should bring up the REPL, where you can enter input to see how it is lexed; for example:
+
+<code>
+> ---- MODULE Test ----
+SINGLE_LINE ---- null
+MODULE MODULE null
+IDENTIFIER Test null
+SINGLE_LINE ---- null
+EOF  null
+</code>
+
+Isn't it amazing how quickly this is coming together?
+The simplicity of the required code is one of the great wonders of language implementation.
 
