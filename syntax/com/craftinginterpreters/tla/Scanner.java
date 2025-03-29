@@ -54,7 +54,16 @@ class Scanner {
         addToken(match('=') ? EQUAL_EQUAL : EQUAL);
         break;
       case '\\':
-        if (consume('/')) addToken(OR);
+        if (match('/')) {
+          addToken(OR);
+        } else if (match('*')) {
+          // A comment goes until the end of the line.
+          while (peek() != '\n' && !isAtEnd()) advance();
+        } else if (isAlpha(peek())) {
+          symbol();
+        } else {
+          TlaPlus.error(line, "Unexpected character.");
+        }
         break;
       case '/':
         if (consume('\\')) addToken(AND);
@@ -87,6 +96,26 @@ class Scanner {
         }
         break;
     }
+  }
+
+  private static final Map<String, TokenType> symbols;
+
+  static {
+    symbols = new HashMap<>();
+    symbols.put("\\in",       IN);
+    symbols.put("\\E",        EXISTS);
+    symbols.put("\\exists",   EXISTS);
+    symbols.put("\\A",        FOR_ALL);
+    symbols.put("\\forall",   FOR_ALL);
+  }
+
+  private void symbol() {
+    while (isAlpha(peek())) advance();
+
+    String text = source.substring(start, current);
+    TokenType type = symbols.get(text);
+    if (type == null) TlaPlus.error(line, "Unexpected character.");
+    else addToken(type);
   }
 
   private static final Map<String, TokenType> keywords;
