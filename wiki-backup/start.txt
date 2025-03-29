@@ -18,3 +18,82 @@ Approaching TLA⁺ from the perspective of an implementer will also bring you be
 Developing an intuition of what TLC is doing when it model-checks your spec will enable you to write specifications that make better use of its capabilities.
 And, if you reach the edge of those capabilities - well, you're well-placed to extend TLC to handle it!
 
+===== Overview =====
+
+This tutorial uses Java.
+There are two good reasons for this:
+  - At time of writing, [[codebase:start|the most mature TLA⁺ tools]] are written in Java, and this tutorial prepares you to work on them.
+  - The high-quality free online textbook [[https://craftinginterpreters.com/contents.html|Crafting Interpreters]] by Robert Nystrom uses Java, and this tutorial is a simple TLA⁺-themed wrapper around its concepts. That book states its own reasons for using Java, which you can read.
+
+You will need to install the [[https://adoptium.net/|Java Development Kit]] appropriate for your system.
+While all code artifacts can be produced entirely by reading this tutorial, if you get out of sync you can find working implementations in [[https://github.com/tlaplus-community/tlaplus-creator|this git repository]].
+
+The tutorial has you construct the TLA⁺ tools from the bottom up.
+First you'll learn to parse its syntax, then how to check its semantics, then how to interpret its expressions, and finally how to check the safety of a simple specification.
+Future expansions will cover liveness checking and, possibly, proof checking.
+A minimal subset of the TLA⁺ language is used; users are encouraged to extend their tools to handle additional TLA⁺ syntax as desired.
+
+===== The Language =====
+
+TLA⁺ is a large, complicated, and ambiguous language that takes a huge amount of work to parse correctly & completely.
+This is assisted by [[https://github.com/tlaplus/rfcs/tree/2a772d9dd11acec5d7dedf30abfab91a49de48b8/language_standard/tests/tlaplus_syntax|a comprehensive test corpus]] exercising the language's nooks & crannies, but here we will make life easy on ourselves.
+This tutorial only uses a minimal subset of TLA⁺ syntax, enough to handle [[https://github.com/tlaplus/Examples/blob/37236893f14527b4fc9f3963891eb2316c3de62e/specifications/DieHard/DieHarder.tla|the generalized DieHard spec]] with some inconvenience.
+While that may seem limiting, this tutorial tries to focus on the difficult & interesting parts of bringing TLA⁺ to life instead of more mundane drudgework like handling all hundred-some user-definable operator symbols.
+You are encouraged to extend this minimal core as you wish; language tooling is best developed incrementally!
+Slowly filling in the details of this rough language sketch has a satisfying meditative aspect.
+
+Here is what our minimal language subset includes:
+  * Named operator definitions like ''op == ...'' and ''op(x, y, z) == ...''
+  * Single-line comments like ''\* comment text''
+  * Declaration of ''VARIABLES''
+  * Finite set literals, like ''{1, 2, 3, 4, 5}''
+  * Quantification over sets with ''\E'' and ''\A''
+  * Function construction and application, like ''[e \in S |-> op(e)]'' and ''f[e]''
+  * The ''ENABLED'' and logical negation (''~'') prefix operators
+  * Some infix operators: ''\in'', ''='', ''+'', ''-'', ''..'', and ''<''
+  * The variable-priming suffix operator
+  * Vertically-aligned conjunction & disjunction lists
+  * The ''IF''/''THEN''/''ELSE'' construct
+  * Whole natural numbers like ''0'', ''5'', ''10'', etc.
+  * Boolean values ''TRUE'' and ''FALSE''
+
+Notably, we do not use the familiar ''---- MODULE Name ----''/''===='' encapsulation.
+Files simply consist of a series of unit-level TLA⁺ definitions.
+We also do not leave room for a separate model configuration file; all ''CONSTANT'' values must instead be hardcoded, and well-known names like ''Init'', ''Next'', ''TypeOK'', and ''Inv'' identify important definitions.
+
+As outlined above, you are free to add missing features (or even your own invented features!) as you wish.
+Each chapter ends with a set of challenges that often involve adding these missing features.
+
+===== Getting Started =====
+
+Read part I (the first three chapters) of free online textbook //[[https://craftinginterpreters.com/contents.html|Crafting Interpreters]]// by Robert Nystrom.
+We will be closely following the material in this book, modifying it to our uses.
+The first two chapters are a nice introduction and overview of language implementation generally.
+Chapter three specifies a toy language called Lox, to be used as an object of study for the remainder of the book.
+Our minimal TLA⁺ subset has some similarity to Lox with regard to expressions involving integers and booleans, but also differences - you can skip the section on closures (unless you want to implement higher-order operator parameters yourself) and the section on classes.
+What's important is that it's similar enough for all the fundamentals to still apply!
+
+Code snippets are shown often in this tutorial.
+When a snippet is similar to code given in the book with the exception of a few lines, the differing lines will be highlighted.
+For example:
+<code java [highlight_lines_extra="2"]>
+  private char advance() {
+    column++;
+    return source.charAt(current++);
+  }
+</code>
+
+Highlighting is also used to identify //new// code being added to a large section of code given previously, with line numbers and surrounding lines included for context.
+For example:
+<code java [enable_line_numbers="true",highlight_lines_extra="2",start_line_numbers_at=82]>
+      case '\n':
+        column = 0;
+        line++;
+        break;
+</code>
+
+Sometimes the code given here is so different from that provided by the book that highlighting is simply ommitted to reduce visual noise.
+A parenthetical will specify the meaning of highlighted code when ambiguous.
+
+To begin the tutorial, start at page [[creating:scanning|Scanning TLA⁺ Tokens]].
+
