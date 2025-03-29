@@ -41,53 +41,29 @@ class Scanner {
       case ')': addToken(RIGHT_PAREN); break;
       case '{': addToken(LEFT_BRACE); break;
       case '}': addToken(RIGHT_BRACE); break;
+      case '[': addToken(LEFT_BRACKET); break;
+      case ']': addToken(RIGHT_BRACKET); break;
       case ',': addToken(COMMA); break;
+      case ':': addToken(COLON); break;
+      case '-': addToken(MINUS); break;
       case '+': addToken(PLUS); break;
       case '<': addToken(LESS_THAN); break;
       case '~': addToken(NEGATION); break;
       case '\'': addToken(PRIME); break;
-      case '-':
-        if (match('-')) {
-          if ('-' == peek() && '-' == peekNext()) {
-            while (match('-')) advance();
-            addToken(SINGLE_LINE);
-          } else {
-            TlaPlus.error(line, "Unexpected character.");
-          }
-        } else {
-          addToken(MINUS);
-        }
-        break;
       case '=':
-        if (match('=')) {
-          if ('=' == peek() && '=' == peekNext()) {
-            while (match('=')) advance();
-            addToken(DOUBLE_LINE);
-          } else {
-            addToken(DEF_EQ);
-          }
-        } else {
-          addToken(EQUALS);
-        }
+        addToken(match('=') ? EQUAL_EQUAL : EQUAL);
         break;
       case '\\':
-        if (match('/')) {
-          addToken(OR);
-        } else if (match('*')) {
-          // A comment goes until the end of the line.
-          while (peek() != '\n' && !isAtEnd()) advance();
-        } else if (match('i') && match('n')) {
-          addToken(IN);
-        } else {
-          TlaPlus.error(line, "Unexpected character.");
-        }
+        if (consume('/')) addToken(OR);
         break;
       case '/':
-        if (match('\\')) {
-          addToken(AND);
-        } else {
-          TlaPlus.error(line, "Unexpected character.");
-        }
+        if (consume('\\')) addToken(AND);
+        break;
+      case '.':
+        if (consume('.')) addToken(DOT_DOT);
+        break;
+      case '|':
+        if (consume('-') && consume('>')) addToken(ALL_MAP_TO);
         break;
 
       case ' ':
@@ -121,7 +97,6 @@ class Scanner {
     keywords.put("ENABLED",    ELSE);
     keywords.put("FALSE",      FALSE);
     keywords.put("IF",         IF);
-    keywords.put("MODULE",     MODULE);
     keywords.put("THEN",       THEN);
     keywords.put("TRUE",       TRUE);
     keywords.put("VARIABLE",   VARIABLES);
@@ -147,11 +122,6 @@ class Scanner {
     addToken(type);
   }
 
-  private char peekNext() {
-    if (current + 1 >= source.length()) return '\0';
-    return source.charAt(current + 1);
-  }
-
   private boolean isDigit(char c) {
     return c >= '0' && c <= '9';
   }
@@ -160,6 +130,11 @@ class Scanner {
     while (isDigit(peek())) advance();
     addToken(NAT_NUMBER,
         Integer.parseInt(source.substring(start, current)));
+  }
+
+  private char peek() {
+    if (isAtEnd()) return '\0';
+    return source.charAt(current);
   }
 
   private boolean match(char expected) {
@@ -171,9 +146,10 @@ class Scanner {
     return true;
   }
 
-  private char peek() {
-    if (isAtEnd()) return '\0';
-    return source.charAt(current);
+  private boolean consume(char expected) {
+    if (match(expected)) return true;
+    else TlaPlus.error(line, "Unexpected character.");
+    return false;
   }
 
   private char advance() {
@@ -187,7 +163,8 @@ class Scanner {
 
   private void addToken(TokenType type, Object literal) {
     String text = source.substring(start, current);
-    tokens.add(new Token(type, text, literal, line, column));
+    int start_column = column - (current - start);
+    tokens.add(new Token(type, text, literal, line, start_column));
   }
 }
 

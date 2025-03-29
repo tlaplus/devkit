@@ -2,25 +2,29 @@
 
 TLA⁺ is a large, complicated, and ambiguous language that takes a huge amount of work to parse correctly & completely.
 This is assisted by [[https://github.com/tlaplus/rfcs/tree/2a772d9dd11acec5d7dedf30abfab91a49de48b8/language_standard/tests/tlaplus_syntax|a comprehensive test corpus]] exercising the language's nooks & crannies, but here we will make life easy on ourselves.
-This tutorial only uses a minimal subset of TLA⁺ syntax, just enough to handle [[https://github.com/tlaplus/Examples/blob/37236893f14527b4fc9f3963891eb2316c3de62e/specifications/DieHard/DieHard.tla|the classic DieHard spec]].
-While that may seem limiting, this tutorial tries to focus on the difficult & interesting parts of parsing the language instead of more mundane drudgework like handling all hundred-some user-definable operator symbols.
+This tutorial only uses a minimal subset of TLA⁺ syntax, enough to handle [[https://github.com/tlaplus/Examples/blob/37236893f14527b4fc9f3963891eb2316c3de62e/specifications/DieHard/DieHarder.tla|the generalized DieHard spec]] with some inconvenience.
+While that may seem limiting, this tutorial tries to focus on the difficult & interesting parts of bringing TLA⁺ to life instead of more mundane drudgework like handling all hundred-some user-definable operator symbols.
 You are encouraged to extend this minimal core as you wish; language tooling is best developed incrementally!
 Slowly filling in the details of this rough language sketch has a satisfying meditative aspect.
 
 Here is what our minimal language subset includes:
-  * The ''---- MODULE Name ----'' header and ''===='' footer
-  * Named parameterized operator definitions like ''op == ...'' and ''op(x, y, z) == ...''
+  * Named operator definitions like ''op == ...'' and ''op(x, y, z) == ...''
   * Single-line comments like ''\* comment text''
   * Declaration of ''VARIABLES''
   * Finite set literals, like ''{1, 2, 3, 4, 5}''
-  * The ''ENABLED'', negative (''-x''), and logical negation (''~'') prefix operators
-  * Some infix operators: ''\in'', ''='', ''+'', ''-'', and ''<''
+  * Quantification over sets with ''\E'' and ''\A''
+  * Function construction and application, like ''[e \in S |-> op(e)]'' and ''f[e]''
+  * The ''ENABLED'' and logical negation (''~'') prefix operators
+  * Some infix operators: ''\in'', ''='', ''+'', ''-'', ''..'', and ''<''
   * The variable-priming suffix operator
-  * Parentheses to control expression grouping
   * Vertically-aligned conjunction & disjunction lists
   * The ''IF''/''THEN''/''ELSE'' construct
-  * Natural numbers like ''0'', ''5'', ''10'', etc.
+  * Whole natural numbers like ''0'', ''5'', ''10'', etc.
   * Boolean values ''TRUE'' and ''FALSE''
+
+Notably, we do not use the familiar ''---- MODULE Name ----''/''===='' encapsulation.
+Files simply consist of a series of unit-level TLA⁺ definitions.
+We also do not leave room for a separate model configuration file; all ''CONSTANT'' values must instead be hardcoded, and well-known names like ''Init'', ''Next'', ''TypeOK'', and ''Inv'' identify important definitions.
 
 As outlined above, you are free to add missing features (or even your own invented features!) as you wish.
 
@@ -126,17 +130,20 @@ package com.craftinginterpreters.tla;
 enum TokenType {
   // Single-character tokens.
   LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE,
-  COMMA, MINUS, PLUS, LESS_THAN, NEGATION, PRIME
+  LEFT_BRACKET, RIGHT_BRACKET, COMMA, COLON,
+  MINUS, PLUS, LESS_THAN, NEGATION, PRIME,
 
-  // One or two character tokens.
-  AND, OR, EQUALS, DEF_EQ,
+  // Short fixed-length tokens.
+  EQUAL, EQUAL_EQUAL, AND, OR, DOT_DOT, ALL_MAP_TO,
 
   // Literals.
   IDENTIFIER, NAT_NUMBER, TRUE, FALSE,
 
   // Keywords.
-  VARIABLES, ENABLED, IF, THEN, ELSE, IN,
-  SINGLE_LINE, MODULE, DOUBLE_LINE
+  VARIABLES, ENABLED, IF, THEN, ELSE,
+
+  // Symbols.
+  IN, EXISTS, FOR_ALL,
 
   EOF
 }
@@ -222,10 +229,10 @@ class Scanner {
 ==== Section 4.5: Recognizing Lexemes ====
 
 [[https://craftinginterpreters.com/scanning.html#recognizing-lexemes|Section 4.5]] finally gets around to actually handling text input!
-Of course, our unambiguous single-character lexing code in ''scanToken'' has some differences (including the removal of ''DOT'', ''SEMICOLON'', and ''STAR''); we move the lexing of ''-'' to the bottom for reasons that will become apparent later.
-Note also that we increment the column position in ''advance()'':
+Of course, our unambiguous single-character lexing code in ''scanToken'' has some differences (including the removal of ''DOT'', ''SEMICOLON'', and ''STAR'').
+Note also that we increment the column position in ''advance()'', and there is some index arithmetic necessary when adding a token; this derives the token's start column:
 
-<code java [enable_line_numbers="true",highlight_lines_extra="10,11,12,13,15,21",start_line_numbers_at=37]>
+<code java [enable_line_numbers="true",highlight_lines_extra="8,9,11,14,15,16,18,24,34,35",start_line_numbers_at=37]>
   private void scanToken() {
     char c = advance();
     switch (c) {
@@ -233,12 +240,15 @@ Note also that we increment the column position in ''advance()'':
       case ')': addToken(RIGHT_PAREN); break;
       case '{': addToken(LEFT_BRACE); break;
       case '}': addToken(RIGHT_BRACE); break;
+      case '[': addToken(LEFT_BRACKET); break;
+      case ']': addToken(RIGHT_BRACKET); break;
       case ',': addToken(COMMA); break;
+      case ':': addToken(COLON); break;
+      case '-': addToken(MINUS); break;
       case '+': addToken(PLUS); break;
       case '<': addToken(LESS_THAN); break;
       case '~': addToken(NEGATION); break;
       case '\'': addToken(PRIME); break;
-      case '-': addToken(MINUS); break;
       default:
         TlaPlus.error(line, "Unexpected character.");
         break;
@@ -256,40 +266,42 @@ Note also that we increment the column position in ''advance()'':
 
   private void addToken(TokenType type, Object literal) {
     String text = source.substring(start, current);
-    tokens.add(new Token(type, text, literal, line, column));
+    int start_column = column - (current - start);
+    tokens.add(new Token(type, text, literal, line, start_column));
   }
 }
 </code>
 
-Moving on to lexing tokens of one or two characters, the differences widen considerably; we want to lex ''='', ''=='', ''/\'', and ''\/'':
+Moving on to lexing short fixed-length tokens, the differences widen considerably; we want to lex ''='', ''=='', ''/\'', ''\/'', ''..'', and ''|->'' (new code highlighted):
 
-<code java [enable_line_numbers="true",highlight_lines_extra="2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18",start_line_numbers_at=49]>
-      case '-': addToken(MINUS); break;
+<code java [enable_line_numbers="true",highlight_lines_extra="2,3,4,5,6,7,8,9,10,11,12,13,14,15,16",start_line_numbers_at=52]>
+      case '\'': addToken(PRIME); break;
       case '=':
-        addToken(match('=') ? DEF_EQ : EQUALS);
+        addToken(match('=') ? EQUAL_EQUAL : EQUAL);
         break;
       case '\\':
-        if (match('/')) {
-          addToken(OR);
-        } else {
-          TlaPlus.error(line, "Unexpected character.");
-        }
+        if (consume('/')) addToken(OR);
         break;
       case '/':
-        if (match('\\')) {
-          addToken(AND);
-        } else {
-          TlaPlus.error(line, "Unexpected character.");
-        }
+        if (consume('\\')) addToken(AND);
+        break;
+      case '.':
+        if (consume('.')) addToken(DOT_DOT);
+        break;
+      case '|':
+        if (consume('-') && consume('>')) addToken(ALL_MAP_TO);
         break;
       default:
         TlaPlus.error(line, "Unexpected character.");
         break;
 </code>
 
-Be sure to include the ''match(char)'' helper method given in the text; again we have to update the value of ''column'' when advancing:
+Two helper methods are used: the first, ''match(char)'', is given in the text.
+We have to modify it slightly by updating the value of ''column'' if ''current'' advances.
+The second helper method is of our own invention.
+''consume(char)'' is similar to ''match(char)'' but logs an error if the expected character is not found.
 
-<code java [highlight_lines_extra="5"]>
+<code java [highlight_lines_extra="5,10,11,12,13,14"]>
   private boolean match(char expected) {
     if (isAtEnd()) return false;
     if (source.charAt(current) != expected) return false;
@@ -297,6 +309,12 @@ Be sure to include the ''match(char)'' helper method given in the text; again we
     column++;
     current++;
     return true;
+  }
+
+  private boolean consume(char expected) {
+    if (match(expected)) return true;
+    else TlaPlus.error(line, "Unexpected character.");
+    return false;
   }
 </code>
 

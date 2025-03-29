@@ -3,17 +3,20 @@ package com.craftinginterpreters.tla;
 enum TokenType {
   // Single-character tokens.
   LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE,
-  COMMA, MINUS, PLUS, LESS_THAN, NEGATION, PRIME,
+  LEFT_BRACKET, RIGHT_BRACKET, COMMA, COLON,
+  MINUS, PLUS, LESS_THAN, NEGATION, PRIME,
 
-  // One or two character tokens.
-  AND, OR, EQUALS, DEF_EQ,
+  // Short fixed-length tokens.
+  EQUAL, EQUAL_EQUAL, AND, OR, DOT_DOT, ALL_MAP_TO,
 
   // Literals.
   IDENTIFIER, NAT_NUMBER, TRUE, FALSE,
 
   // Keywords.
-  VARIABLES, ENABLED, IF, THEN, ELSE, IN,
-  SINGLE_LINE, MODULE, DOUBLE_LINE,
+  VARIABLES, ENABLED, IF, THEN, ELSE,
+
+  // Symbols.
+  IN, EXISTS, FOR_ALL,
 
   EOF
 }
