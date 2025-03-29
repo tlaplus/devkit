@@ -81,7 +81,7 @@ public class TlaPlus {
 ==== Section 4.2: Lexemes and Tokens ====
 
 The ''TokenType'' class in [[https://craftinginterpreters.com/scanning.html#lexemes-and-tokens|section 4.2]] is our first major departure from the book.
-Instead of Lox tokens, we use the atomic components of our minimal TLA⁺ language subset defined above.
+Instead of Lox tokens, we use the atomic components of our minimal TLA⁺ language subset.
 Adapting the snippet in [[https://craftinginterpreters.com/scanning.html#token-type|section 4.2.1]] we get:
 
 <code java [enable_line_numbers="true"]>
@@ -144,7 +144,7 @@ class Token {
 
 ==== Section 4.4: The Scanner Class ====
 
-We now move on to the very important ''Scanner'' class in [[https://craftinginterpreters.com/scanning.html#the-scanner-class|section 4.4]].
+Nothing in section 4.3 requires modification, so we can move on to the very important ''Scanner'' class in [[https://craftinginterpreters.com/scanning.html#the-scanner-class|section 4.4]].
 Our first modification to the code given in the book is to track the column in addition to the line, mirroring our addition to the ''Token'' class:
 
 <code java [enable_line_numbers="true",highlight_lines_extra="1,8,16,29"]>
@@ -355,7 +355,7 @@ We aren't supporting strings (unless you want to go the extra mile) so next up i
 This uses the ''isDigit(char)'' and ''number()'' helpers.
 We're only handling whole natural numbers, no decimals, so our ''number()'' method is much simpler than the one from the book:
 
-<code java>
+<code java [highlight_lines_extra="7,8"]>
   private boolean isDigit(char c) {
     return c >= '0' && c <= '9';
   }
@@ -458,18 +458,22 @@ Start by adding yet another branch to the ''\'' case (it's getting quite crowded
         break;
 </code>
 
-Then define the symbol map and ''symbol()'' helper:
+Then define the symbol map and ''symbol()'' helper - we can also throw in a few token symbol variants, why not:
 
 <code java>
   private static final Map<String, TokenType> symbols;
 
   static {
     symbols = new HashMap<>();
-    symbols.put("\\in",       IN);
+    symbols.put("\\land",     AND);
     symbols.put("\\E",        EXISTS);
     symbols.put("\\exists",   EXISTS);
     symbols.put("\\A",        FOR_ALL);
     symbols.put("\\forall",   FOR_ALL);
+    symbols.put("\\in",       IN);
+    symbols.put("\\lnot",     NEGATION);
+    symbols.put("\\neg",      NEGATION);
+    symbols.put("\\lor",      OR);
   }
 
   private void symbol() {
@@ -502,6 +506,8 @@ EOF  null
 
 Isn't it amazing how quickly this is coming together?
 The simplicity of the required code is one of the great wonders of language implementation.
+Next we learn how to collect our tokens into a parse tree!
+Continue the tutorial at [[creating:syntax|Parsing TLA⁺ Syntax]].
 
 ===== Challenges =====
 

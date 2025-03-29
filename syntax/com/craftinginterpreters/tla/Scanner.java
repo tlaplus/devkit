@@ -80,7 +80,7 @@ class Scanner {
       case '\t':
         // Ignore whitespace.
         break;
- 
+
       case '\n':
         column = 0;
         line++;
@@ -102,11 +102,15 @@ class Scanner {
 
   static {
     symbols = new HashMap<>();
-    symbols.put("\\in",       IN);
+    symbols.put("\\land",     AND);
     symbols.put("\\E",        EXISTS);
     symbols.put("\\exists",   EXISTS);
     symbols.put("\\A",        FOR_ALL);
     symbols.put("\\forall",   FOR_ALL);
+    symbols.put("\\in",       IN);
+    symbols.put("\\lnot",     NEGATION);
+    symbols.put("\\neg",      NEGATION);
+    symbols.put("\\lor",      OR);
   }
 
   private void symbol() {
