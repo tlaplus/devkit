@@ -6,16 +6,17 @@ For each section in the chapter, first read the section in the book and then rea
 
 ==== Section 4.1: The Interpreter Framework ====
 
-Everything in [[https://craftinginterpreters.com/scanning.html#the-interpreter-framework|section 4.1]] can be left unchanged from what's given, although of course it makes sense to change some of the names from "Lox" to "TlaPlus" or similar.
-You should thus have followed along and arrived at something similar to the below file ''TlaPlus.java'':
+Almost everything in [[https://craftinginterpreters.com/scanning.html#the-interpreter-framework|section 4.1]] can be left unchanged from what's given, although of course it makes sense to change some of the names from "Lox" to "TlaPlus" or similar.
+We do make one small functional modification: TLA⁺ source files are assumed to be encoded in UTF-8, a variable-width ASCII-compatible encoding, so we specify that when performing the file read.
+Here's our main file, ''TlaPlus.java'':
 
-<code java [enable_line_numbers="true",highlight_lines_extra="1,11"]>
+<code java [enable_line_numbers="true",highlight_lines_extra="1,6,11,27"]>
 package com.craftinginterpreters.tla;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
@@ -36,7 +37,7 @@ public class TlaPlus {
 
   private static void runFile(String path) throws IOException {
     byte[] bytes = Files.readAllBytes(Paths.get(path));
-    run(new String(bytes, Charset.defaultCharset()));
+    run(new String(bytes, StandardCharsets.UTF_8));
 
     // Indicate an error in the exit code.
     if (hadError) System.exit(65);
@@ -514,9 +515,10 @@ Continue the tutorial at [[creating:syntax|Parsing TLA⁺ Syntax]].
 
 Here are some optional challenges to flesh out your TLA⁺ scanner, roughly ranked from simplest to most difficult.
 You should save a copy of your code before attempting these.
+  - Our error reporting functionality only reports the line on which the error occurs, even though we now also track the column. Modify the error reporting functions to pipe through and print out the column location of the error.
   - Implement token recognition for the ''---- MODULE Name ----''/''===='' header and footer. The ''----'' and ''===='' tokens must be of length four or greater. It can be tricky to gracefully integrate their logic with the existing ''MINUS'' and ''EQUAL''/''EQUAL_EQUAL'' case blocks.
   - Modify ''number()'' and ''identifier()'' to properly implement TLA⁺ identifiers, which can consist of any string of alphanumeric or underscore characters as long as at least one character is alphabetical. This corresponds to the regex ''[a-zA-Z0-9_]*[a-zA-Z][a-zA-Z0-9_]*''.
   - Add support for nestable block comments like ''(* text (* text *) text *)''. This requires a much deeper modification of the scanner than might first be apparent. Currently, our lexing grammer is //regular//: it does not need to store any unbounded state to lex everything. However, to properly handle block comments you'll need to add another class field like ''int block_comment_nest_level = -1'' and increment/decrement it as you encounter ''(*'' and ''*)'' tokens. In technical terms this addition makes the lexing grammar context-free instead of regular.
   - Similar to nested block comments, add support for extramodular text & nested modules. TLA⁺ files are properly supposed to ignore all text outside of modules, treating it the same as comments. Lexing TLA⁺ tokens should only start after reading ahead and detecting a ''---- MODULE'' sequence. Then, after detecting termination of the module with ''===='', the scanner should revert to ignoring the text. Supporting nested modules complicates this further, since you'll need to keep track of the module nesting level to know when you can start ignoring text again.
-  - Add Unicode support. This is surprisingly straightforward. Instead of using the ''char'' type, Java represents Unicode codepoints as an ''int''. So, you'll just be iterating over an array of ''int''s instead of a string. Character literals can still be directly compared against ''int''s; our ''case'' statement should be nearly unchanged. Look at the Java 8 [[https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/CharSequence.html#codePoints()|string.codePoints() method]]. Add support for Unicode symbol variants like ''≜'', ''∈'', ''∧'', ''∨'', ''∃'', and ''∀''.
+  - Add Unicode support. Instead of using the ''char'' type, Java represents Unicode codepoints as an ''int''. So, you'll be iterating over an array of ''int''s instead of the characters of a string. Character literals can still be directly compared against ''int''s; our ''case'' statement should be nearly unchanged. Look at the Java 8 [[https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/CharSequence.html#codePoints()|string.codePoints() method]]. Add support for Unicode symbol variants like ''≜'', ''∈'', ''∧'', ''∨'', ''∃'', and ''∀''. Our code reads files assuming the UTF-8 encoding so that's already sorted.
 
