@@ -1,0 +1,6 @@
+====== Parsing TLA⁺ Syntax ======
+
+Outline:
+  - Section 5.1.3: provide grammar for TLA⁺ expressions
+  - Class & output package name only changes to GenerateAst.java
+  - 
