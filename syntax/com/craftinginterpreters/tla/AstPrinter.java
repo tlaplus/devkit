@@ -28,6 +28,11 @@ class AstPrinter implements Expr.Visitor<String> {
   }
 
   @Override
+  public String visitFnConsExpr(Expr.FnCons expr) {
+    return parenthesize("FnCons", expr.set, expr.expr);
+  }
+
+  @Override
   public String visitFnApplExpr(Expr.FnAppl expr) {
     return parenthesize("FnAppl", expr.name, expr.parameter);
   }

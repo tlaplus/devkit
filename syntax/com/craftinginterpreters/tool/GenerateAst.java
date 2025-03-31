@@ -18,6 +18,7 @@ public class GenerateAst {
       "Literal  : Object value",
       "Unary    : Token operator, Expr right",
       "FnAppl   : Expr name, Expr parameter",
+      "FnCons   : String intro, Expr set, Expr expr",
       "Quant    : TokenType quantifier, List<String> intros, Expr set, Expr expr"
     ));
   }

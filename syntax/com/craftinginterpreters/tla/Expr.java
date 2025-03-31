@@ -9,6 +9,7 @@ abstract class Expr {
     R visitLiteralExpr(Literal expr);
     R visitUnaryExpr(Unary expr);
     R visitFnApplExpr(FnAppl expr);
+    R visitFnConsExpr(FnCons expr);
     R visitQuantExpr(Quant expr);
   }
   static class Binary extends Expr {
@@ -78,6 +79,22 @@ abstract class Expr {
 
     final Expr name;
     final Expr parameter;
+  }
+  static class FnCons extends Expr {
+    FnCons(String intro, Expr set, Expr expr) {
+      this.intro = intro;
+      this.set = set;
+      this.expr = expr;
+    }
+
+    @Override
+    <R> R accept(Visitor<R> visitor) {
+      return visitor.visitFnConsExpr(this);
+    }
+
+    final String intro;
+    final Expr set;
+    final Expr expr;
   }
   static class Quant extends Expr {
     Quant(TokenType quantifier, List<String> intros, Expr set, Expr expr) {

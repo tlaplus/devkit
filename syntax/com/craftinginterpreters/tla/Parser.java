@@ -24,6 +24,16 @@ class Parser {
   }
 
   private Expr expression() {
+    if (match(LEFT_BRACKET)) {
+      String intro = consume(IDENTIFIER, "Identifier required after '['.").lexeme;
+      consume(IN, "'\\in' required after function constructor intro.");
+      Expr set = expression();
+      consume(ALL_MAP_TO, "'|->' is required after function constructor set.");
+      Expr expr = expression();
+      consume(RIGHT_BRACKET, "']' is required to terminate function constructor.");
+      return new Expr.FnCons(intro, set, expr);
+    }
+
     while (match(EXISTS, FOR_ALL)) {
       TokenType quantifier = previous().type;
       List<String> intros = new ArrayList<String>();
@@ -31,9 +41,9 @@ class Parser {
         Token intro = consume(IDENTIFIER, "Identifier is required after quantifier.");
         intros.add(intro.lexeme);
       } while (match(COMMA));
-      consume(IN, "\\in is required after quantified identifier intro.");
+      consume(IN, "'\\in' is required after quantified identifier intro.");
       Expr set = expression();
-      consume(COLON, ": is required after quantification set expression.");
+      consume(COLON, "':' is required after quantification set expression.");
       Expr expr = expression();
       return new Expr.Quant(quantifier, intros, set, expr);
     }
