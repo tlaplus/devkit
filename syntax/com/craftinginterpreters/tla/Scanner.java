@@ -127,7 +127,7 @@ class Scanner {
   static {
     keywords = new HashMap<>();
     keywords.put("ELSE",       ELSE);
-    keywords.put("ENABLED",    ELSE);
+    keywords.put("ENABLED",    ENABLED);
     keywords.put("FALSE",      FALSE);
     keywords.put("IF",         IF);
     keywords.put("THEN",       THEN);
