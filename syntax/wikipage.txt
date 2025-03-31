@@ -17,3 +17,4 @@ Changes to scanner:
   - Add feature: land & lor infix operators
   - Add feature: parentheses for expression grouping
   - Bug: ENABLED is tokenized as ELSE
+  - Change NAT_NUMBER to NUMBER

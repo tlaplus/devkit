@@ -1,6 +1,7 @@
 package com.craftinginterpreters.tla;
 
 import java.util.List;
+import java.util.ArrayList;
 
 import static com.craftinginterpreters.tla.TokenType.*;
 
@@ -23,6 +24,20 @@ class Parser {
   }
 
   private Expr expression() {
+    while (match(EXISTS, FOR_ALL)) {
+      TokenType quantifier = previous().type;
+      List<String> intros = new ArrayList<String>();
+      do {
+        Token intro = consume(IDENTIFIER, "Identifier is required after quantifier.");
+        intros.add(intro.lexeme);
+      } while (match(COMMA));
+      consume(IN, "\\in is required after quantified identifier intro.");
+      Expr set = expression();
+      consume(COLON, ": is required after quantification set expression.");
+      Expr expr = expression();
+      return new Expr.Quant(quantifier, intros, set, expr);
+    }
+
     return prec3FixOp();
   }
 
@@ -113,10 +128,21 @@ class Parser {
       return new Expr.Unary(operator, right);
     }
 
-    Expr expr = primary();
+    Expr expr = functionApplication();
     while (match(PRIME)) {
       Token operator = previous();
       expr = new Expr.Unary(operator, expr);
+    }
+
+    return expr;
+  }
+
+  private Expr functionApplication() {
+    Expr expr = primary();
+    while (match(LEFT_BRACKET)) {
+      Expr parameter = expression();
+      consume(RIGHT_BRACKET, "Expect ']' after expression.");
+      expr = new Expr.FnAppl(expr, parameter);
     }
 
     return expr;

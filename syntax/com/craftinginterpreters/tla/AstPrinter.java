@@ -27,6 +27,16 @@ class AstPrinter implements Expr.Visitor<String> {
     return parenthesize(expr.operator.lexeme, expr.right);
   }
 
+  @Override
+  public String visitFnApplExpr(Expr.FnAppl expr) {
+    return parenthesize("FnAppl", expr.name, expr.parameter);
+  }
+
+  @Override
+  public String visitQuantExpr(Expr.Quant expr) {
+    return parenthesize("Quant", expr.set, expr.expr);
+  }
+
   private String parenthesize(String name, Expr... exprs) {
     StringBuilder builder = new StringBuilder();
 

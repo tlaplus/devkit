@@ -8,6 +8,8 @@ abstract class Expr {
     R visitGroupingExpr(Grouping expr);
     R visitLiteralExpr(Literal expr);
     R visitUnaryExpr(Unary expr);
+    R visitFnApplExpr(FnAppl expr);
+    R visitQuantExpr(Quant expr);
   }
   static class Binary extends Expr {
     Binary(Expr left, Token operator, Expr right) {
@@ -62,6 +64,38 @@ abstract class Expr {
 
     final Token operator;
     final Expr right;
+  }
+  static class FnAppl extends Expr {
+    FnAppl(Expr name, Expr parameter) {
+      this.name = name;
+      this.parameter = parameter;
+    }
+
+    @Override
+    <R> R accept(Visitor<R> visitor) {
+      return visitor.visitFnApplExpr(this);
+    }
+
+    final Expr name;
+    final Expr parameter;
+  }
+  static class Quant extends Expr {
+    Quant(TokenType quantifier, List<String> intros, Expr set, Expr expr) {
+      this.quantifier = quantifier;
+      this.intros = intros;
+      this.set = set;
+      this.expr = expr;
+    }
+
+    @Override
+    <R> R accept(Visitor<R> visitor) {
+      return visitor.visitQuantExpr(this);
+    }
+
+    final TokenType quantifier;
+    final List<String> intros;
+    final Expr set;
+    final Expr expr;
   }
 
   abstract <R> R accept(Visitor<R> visitor);
