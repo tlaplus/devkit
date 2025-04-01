@@ -43,19 +43,20 @@ You are encouraged to extend this minimal core as you wish; language tooling is 
 Slowly filling in the details of this rough language sketch has a satisfying meditative aspect.
 
 Here is what our minimal language subset includes:
-  * Named operator definitions like ''op == ...'' and ''op(x, y, z) == ...''
-  * Single-line comments like ''\* comment text''
-  * Declaration of ''VARIABLES''
-  * Finite set literals, like ''{1, 2, 3, 4, 5}''
-  * Quantification over sets with ''\E'' and ''\A''
-  * Function construction and application, like ''[e \in S |-> op(e)]'' and ''f[e]''
-  * The ''ENABLED'' and logical negation (''~'') prefix operators
-  * Some infix operators: ''\in'', ''='', ''+'', ''-'', ''..'', and ''<''
-  * The variable-priming suffix operator
-  * Vertically-aligned conjunction & disjunction lists
-  * The ''IF''/''THEN''/''ELSE'' construct
   * Whole natural numbers like ''0'', ''5'', ''10'', etc.
   * Boolean values ''TRUE'' and ''FALSE''
+  * Finite set literals, like ''{1, 2, 3, 4, 5}''
+  * Parentheses for expression grouping
+  * ''IF''/''THEN''/''ELSE'' expressions
+  * Single-line comments like ''\* comment text''
+  * The ''ENABLED'', negative (''-''), and logical negation (''~'') prefix operators
+  * Some infix operators: ''\in'', ''='', ''+'', ''-'', ''..'', ''/\'', ''\/'', and ''<''
+  * The variable-priming suffix operator
+  * Quantification over sets with ''\E'' and ''\A''
+  * Function construction and application, like ''[e \in S |-> op(e)]'' and ''f[e]''
+  * Named operator definitions like ''op == ...'' and ''op(x, y, z) == ...''
+  * Declaration of ''VARIABLES''
+  * Vertically-aligned conjunction & disjunction lists
 
 Notably, we do not use the familiar ''---- MODULE Name ----''/''===='' encapsulation.
 Files simply consist of a series of unit-level TLA⁺ definitions.
