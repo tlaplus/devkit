@@ -17,9 +17,12 @@ public class GenerateAst {
       "Grouping : Expr expression",
       "Literal  : Object value",
       "Unary    : Token operator, Expr right",
+      "Postfix  : Expr left, Token operator",
+      "ITE      : Expr condition, Expr yes, Expr no",
+      "Set      : List<Expr> elements",
       "FnAppl   : Expr name, Expr parameter",
       "FnCons   : String intro, Expr set, Expr expr",
-      "Quant    : TokenType quantifier, List<String> intros, Expr set, Expr expr"
+      "Quant    : Token quantifier, List<String> intros, Expr set, Expr expr"
     ));
   }
 

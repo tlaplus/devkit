@@ -28,6 +28,21 @@ class AstPrinter implements Expr.Visitor<String> {
   }
 
   @Override
+  public String visitPostfixExpr(Expr.Postfix expr) {
+    return parenthesize(expr.operator.lexeme, expr.left);
+  }
+
+  @Override
+  public String visitITEExpr(Expr.ITE expr) {
+    return parenthesize("ITE", expr.condition, expr.yes, expr.no);
+  }
+
+  @Override
+  public String visitSetExpr(Expr.Set expr) {
+    return parenthesize("Set", expr.elements.toArray(Expr[]::new));
+  }
+
+  @Override
   public String visitFnConsExpr(Expr.FnCons expr) {
     return parenthesize("FnCons", expr.set, expr.expr);
   }
@@ -39,7 +54,7 @@ class AstPrinter implements Expr.Visitor<String> {
 
   @Override
   public String visitQuantExpr(Expr.Quant expr) {
-    return parenthesize("Quant", expr.set, expr.expr);
+    return parenthesize(expr.quantifier.lexeme, expr.set, expr.expr);
   }
 
   private String parenthesize(String name, Expr... exprs) {

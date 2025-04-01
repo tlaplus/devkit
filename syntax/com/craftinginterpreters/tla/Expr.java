@@ -8,6 +8,9 @@ abstract class Expr {
     R visitGroupingExpr(Grouping expr);
     R visitLiteralExpr(Literal expr);
     R visitUnaryExpr(Unary expr);
+    R visitPostfixExpr(Postfix expr);
+    R visitITEExpr(ITE expr);
+    R visitSetExpr(Set expr);
     R visitFnApplExpr(FnAppl expr);
     R visitFnConsExpr(FnCons expr);
     R visitQuantExpr(Quant expr);
@@ -66,6 +69,48 @@ abstract class Expr {
     final Token operator;
     final Expr right;
   }
+  static class Postfix extends Expr {
+    Postfix(Expr left, Token operator) {
+      this.left = left;
+      this.operator = operator;
+    }
+
+    @Override
+    <R> R accept(Visitor<R> visitor) {
+      return visitor.visitPostfixExpr(this);
+    }
+
+    final Expr left;
+    final Token operator;
+  }
+  static class ITE extends Expr {
+    ITE(Expr condition, Expr yes, Expr no) {
+      this.condition = condition;
+      this.yes = yes;
+      this.no = no;
+    }
+
+    @Override
+    <R> R accept(Visitor<R> visitor) {
+      return visitor.visitITEExpr(this);
+    }
+
+    final Expr condition;
+    final Expr yes;
+    final Expr no;
+  }
+  static class Set extends Expr {
+    Set(List<Expr> elements) {
+      this.elements = elements;
+    }
+
+    @Override
+    <R> R accept(Visitor<R> visitor) {
+      return visitor.visitSetExpr(this);
+    }
+
+    final List<Expr> elements;
+  }
   static class FnAppl extends Expr {
     FnAppl(Expr name, Expr parameter) {
       this.name = name;
@@ -97,7 +142,7 @@ abstract class Expr {
     final Expr expr;
   }
   static class Quant extends Expr {
-    Quant(TokenType quantifier, List<String> intros, Expr set, Expr expr) {
+    Quant(Token quantifier, List<String> intros, Expr set, Expr expr) {
       this.quantifier = quantifier;
       this.intros = intros;
       this.set = set;
@@ -109,7 +154,7 @@ abstract class Expr {
       return visitor.visitQuantExpr(this);
     }
 
-    final TokenType quantifier;
+    final Token quantifier;
     final List<String> intros;
     final Expr set;
     final Expr expr;

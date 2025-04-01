@@ -10,7 +10,13 @@ Outline:
     + PLUS and MINUS should also conflict I think
   - In error(), rename Lox to TlaPlus
   - What does the synchronize() method look like?
-  - 
+  - Finite set literal
+  - if/then/else
+  - Should be delayed:
+    + Prime postfix operator, since it is useless in expressions
+    + Function construction, since it uses vars
+    + Quantification, since it uses vars
+    + Function application, since it uses functions
 
 Changes to scanner:
   - Add feature: negative prefix operator

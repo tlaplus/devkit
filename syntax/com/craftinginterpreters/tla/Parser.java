@@ -24,6 +24,27 @@ class Parser {
   }
 
   private Expr expression() {
+    if (match(IF)) {
+      Expr condition = expression();
+      consume(THEN, "'THEN' required after 'IF' expression.");
+      Expr yes = expression();
+      consume(ELSE, "'ELSE' required after 'THEN' expression.");
+      Expr no = expression();
+      return new Expr.ITE(condition, yes, no);
+    }
+
+    if (match(LEFT_BRACE)) {
+      List<Expr> elements = new ArrayList<Expr>();
+      if (match(RIGHT_BRACE)) {
+        return new Expr.Set(elements);
+      }
+      do {
+        elements.add(expression());
+      } while (match(COMMA));
+      consume(RIGHT_BRACE, "'}' is required to terminate finite set literal.");
+      return new Expr.Set(elements);
+    }
+
     if (match(LEFT_BRACKET)) {
       String intro = consume(IDENTIFIER, "Identifier required after '['.").lexeme;
       consume(IN, "'\\in' required after function constructor intro.");
@@ -35,7 +56,7 @@ class Parser {
     }
 
     while (match(EXISTS, FOR_ALL)) {
-      TokenType quantifier = previous().type;
+      Token quantifier = previous();
       List<String> intros = new ArrayList<String>();
       do {
         Token intro = consume(IDENTIFIER, "Identifier is required after quantifier.");
@@ -141,7 +162,7 @@ class Parser {
     Expr expr = functionApplication();
     while (match(PRIME)) {
       Token operator = previous();
-      expr = new Expr.Unary(operator, expr);
+      expr = new Expr.Postfix(expr, operator);
     }
 
     return expr;
