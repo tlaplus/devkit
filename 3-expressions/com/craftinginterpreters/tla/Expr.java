@@ -8,12 +8,8 @@ abstract class Expr {
     R visitGroupingExpr(Grouping expr);
     R visitLiteralExpr(Literal expr);
     R visitUnaryExpr(Unary expr);
-    R visitPostfixExpr(Postfix expr);
-    R visitITEExpr(ITE expr);
+    R visitTernaryExpr(Ternary expr);
     R visitSetExpr(Set expr);
-    R visitFnApplExpr(FnAppl expr);
-    R visitFnConsExpr(FnCons expr);
-    R visitQuantExpr(Quant expr);
   }
   static class Binary extends Expr {
     Binary(Expr left, Token operator, Expr right) {
@@ -56,9 +52,9 @@ abstract class Expr {
     final Object value;
   }
   static class Unary extends Expr {
-    Unary(Token operator, Expr right) {
+    Unary(Token operator, Expr expr) {
       this.operator = operator;
-      this.right = right;
+      this.expr = expr;
     }
 
     @Override
@@ -67,37 +63,25 @@ abstract class Expr {
     }
 
     final Token operator;
-    final Expr right;
+    final Expr expr;
   }
-  static class Postfix extends Expr {
-    Postfix(Expr left, Token operator) {
-      this.left = left;
+  static class Ternary extends Expr {
+    Ternary(Token operator, Expr first, Expr second, Expr third) {
       this.operator = operator;
+      this.first = first;
+      this.second = second;
+      this.third = third;
     }
 
     @Override
     <R> R accept(Visitor<R> visitor) {
-      return visitor.visitPostfixExpr(this);
+      return visitor.visitTernaryExpr(this);
     }
 
-    final Expr left;
     final Token operator;
-  }
-  static class ITE extends Expr {
-    ITE(Expr condition, Expr yes, Expr no) {
-      this.condition = condition;
-      this.yes = yes;
-      this.no = no;
-    }
-
-    @Override
-    <R> R accept(Visitor<R> visitor) {
-      return visitor.visitITEExpr(this);
-    }
-
-    final Expr condition;
-    final Expr yes;
-    final Expr no;
+    final Expr first;
+    final Expr second;
+    final Expr third;
   }
   static class Set extends Expr {
     Set(List<Expr> elements) {
@@ -110,54 +94,6 @@ abstract class Expr {
     }
 
     final List<Expr> elements;
-  }
-  static class FnAppl extends Expr {
-    FnAppl(Expr name, Expr parameter) {
-      this.name = name;
-      this.parameter = parameter;
-    }
-
-    @Override
-    <R> R accept(Visitor<R> visitor) {
-      return visitor.visitFnApplExpr(this);
-    }
-
-    final Expr name;
-    final Expr parameter;
-  }
-  static class FnCons extends Expr {
-    FnCons(String intro, Expr set, Expr expr) {
-      this.intro = intro;
-      this.set = set;
-      this.expr = expr;
-    }
-
-    @Override
-    <R> R accept(Visitor<R> visitor) {
-      return visitor.visitFnConsExpr(this);
-    }
-
-    final String intro;
-    final Expr set;
-    final Expr expr;
-  }
-  static class Quant extends Expr {
-    Quant(Token quantifier, List<String> intros, Expr set, Expr expr) {
-      this.quantifier = quantifier;
-      this.intros = intros;
-      this.set = set;
-      this.expr = expr;
-    }
-
-    @Override
-    <R> R accept(Visitor<R> visitor) {
-      return visitor.visitQuantExpr(this);
-    }
-
-    final Token quantifier;
-    final List<String> intros;
-    final Expr set;
-    final Expr expr;
   }
 
   abstract <R> R accept(Visitor<R> visitor);

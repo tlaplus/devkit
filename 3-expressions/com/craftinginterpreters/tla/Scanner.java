@@ -161,7 +161,7 @@ class Scanner {
 
   private void number() {
     while (isDigit(peek())) advance();
-    addToken(NAT_NUMBER,
+    addToken(NUMBER,
         Integer.parseInt(source.substring(start, current)));
   }
 

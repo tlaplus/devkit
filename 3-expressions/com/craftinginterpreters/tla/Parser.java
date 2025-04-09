@@ -183,7 +183,7 @@ class Parser {
     if (match(FALSE)) return new Expr.Literal(false);
     if (match(TRUE)) return new Expr.Literal(true);
 
-    if (match(NAT_NUMBER)) {
+    if (match(NUMBER)) {
       return new Expr.Literal(previous().literal);
     }
 
