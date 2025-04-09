@@ -18,12 +18,19 @@ Approaching TLA⁺ from the perspective of an implementer will also bring you be
 Developing an intuition of what TLC is doing when it model-checks your spec will enable you to write specifications that make better use of its capabilities.
 And, if you reach the edge of those capabilities - well, you're well-placed to extend TLC to handle it!
 
+===== Table of Contents =====
+
+  - [[https://docs.tlapl.us/creating:start|Introduction (this page)]]
+  - [[https://docs.tlapl.us/creating:scanning|Scanning TLA⁺ Tokens]]
+  - [[https://docs.tlapl.us/creating:expressions|Handling Constant TLA⁺ Expressions]]
+  - TODO
+
 ===== Overview =====
 
 This tutorial uses Java.
 There are two good reasons for this:
   - At time of writing, [[codebase:start|the most mature TLA⁺ tools]] are written in Java, and this tutorial prepares you to work on them.
-  - The high-quality free online textbook [[https://craftinginterpreters.com/contents.html|Crafting Interpreters]] by Robert Nystrom uses Java, and this tutorial is a simple TLA⁺-themed wrapper around its concepts. That book states its own reasons for using Java, which you can read.
+  - The high-quality free online textbook //[[https://craftinginterpreters.com/contents.html|Crafting Interpreters]]// by Robert Nystrom uses Java, and this tutorial is a simple TLA⁺-themed wrapper around its concepts. That book states its own reasons for using Java, which you can read.
 
 You will need to install the [[https://adoptium.net/|Java Development Kit]] appropriate for your system.
 While all code artifacts can be produced entirely by reading this tutorial, if you get out of sync you can find working implementations in [[https://github.com/tlaplus-community/tlaplus-creator|this git repository]].
