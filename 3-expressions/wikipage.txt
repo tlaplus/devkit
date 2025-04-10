@@ -23,12 +23,12 @@ However, since this tutorial is intended to be self-contained code-wise, all nec
 
 Everything before [[https://craftinginterpreters.com/representing-code.html#a-grammar-for-lox-expressions|Section 5.1.3: A Grammar for Lox expressions]] applies equally to TLA⁺.
 The ambiguous first-draft grammar for Lox expressions can be adapted to TLA⁺:
-<code>
+<code eiffel>
 expression     → literal
                | unary
                | binary
                | ternary
-               | set
+               | variadic
                | grouping ;
 
 literal        → NUMBER | "TRUE" | "FALSE" ;
@@ -36,15 +36,21 @@ grouping       → "(" expression ")" ;
 unary          → (( "ENABLED" | "-" ) expression ) | ( expression "'" ) ;
 binary         → expression operator expression ;
 ternary        → "IF" expression "THEN" expression "ELSE" expression;
-set            → "{" ( expression ( "," expression )* )? "}"
+variadic       → "{" ( expression ( "," expression )* )? "}"
 operator       → "=" | "+" | "-" | ".." | "/\" | "\/" | "<"  | "\in" ;
 </code>
 There are a few interesting differences.
 The ''unary'' rule now captures both prefix //and// suffix operators, which both only accept a single parameter.
 The ''ternary'' rule matches the ''IF''/''THEN''/''ELSE'' operator, with the three parameters being the predicate, the true branch, and the false branch.
-There is also the ''set'' rule matching finite set literals like ''{1, 2, 3}'' or the empty set ''{}''.
 The operators are changed to the set of operators defined in our TLA⁺ implementation.
 These are all the expressions we can use without introducing the concept of identifiers referring to something else.
+
+There is also the ''variadic'' rule matching finite set literals like ''{1, 2, 3}'' or the empty set ''{}''.
+This one is so named because it's where we'll put operators accepting varying numbers of parameters.
+It's kind of weird to think of the finite set literal ''{1, 2, 3}'' as an operator, but it is!
+The only difference between ''{1, 2, 3}'' and an operator like ''constructSet(1, 2, 3)'' is syntactic sugar.
+This is the perspective of a language implementer.
+Later on we will extend the definition of ''variadic'' to include vertically-aligned conjunction & disjunction lists.
 
 ==== Section 5.2: Implementing Syntax Trees ====
 
@@ -72,7 +78,7 @@ public class GenerateAst {
       "Literal  : Object value",
       "Unary    : Token operator, Expr expr",
       "Ternary  : Token operator, Expr first, Expr second, Expr third",
-      "Set      : List<Expr> elements"
+      "Variadic : Token operator, List<Expr> parameters"
     ));
   }
 }
@@ -241,8 +247,9 @@ We also have some modifications and additions to the ''visit'' methods of the ''
   }
 
   @Override
-  public string visitSetExpr(Expr.Set expr) {
-    return parenthesize("Set", expr.elements.toArray(Expr[]::new));
+  public string visitVariadicExpr(Expr.Variadic expr) {
+    return parenthesize(expr.operator.lexeme,
+                        expr.parameters.toArray(Expr[]::new));
   }
 </code>
 
@@ -264,4 +271,39 @@ The ''parenthesize'' method is unchanged from the book and should be inserted af
 </code>
 
 It isn't necessary to define a ''main'' method in the ''AstPrinter'' class, but if you'd like to try it out you are free to copy the one given in the book.
+
+===== Chapter 6: Parsing Expressions =====
+
+In [[https://craftinginterpreters.com/parsing-expressions.html|Chapter 6]], we finally build a parse tree out of our tokens!
+
+==== Chapter 6.1: Ambiguity and the Parsing Game ====
+
+First, as in [[https://craftinginterpreters.com/parsing-expressions.html#ambiguity-and-the-parsing-game|section 6.1 of the book]], we have to disambiguate our grammar.
+Recall the first draft of our grammar for constant TLA⁺ expressions:
+
+<code eiffel>
+expression     → literal
+               | unary
+               | binary
+               | ternary
+               | variadic
+               | grouping ;
+
+literal        → NUMBER | "TRUE" | "FALSE" ;
+grouping       → "(" expression ")" ;
+unary          → (( "ENABLED" | "-" ) expression ) | ( expression "'" ) ;
+binary         → expression operator expression ;
+ternary        → "IF" expression "THEN" expression "ELSE" expression;
+variadic       → "{" ( expression ( "," expression )* )? "}"
+operator       → "=" | "+" | "-" | ".." | "/\" | "\/" | "<"  | "\in" ;
+</code>
+
+The way that precedence works in TLA⁺ is different from Lox, and indeed different from most other languages!
+One side-quote from this section of the book reads:
+
+>While not common these days, some languages specify that certain pairs of operators have no relative precedence. That makes it a syntax error to mix those operators in an expression without using explicit grouping.
+>Likewise, some operators are *non-associative*. That means it’s an error to use that operator more than once in a sequence. For example, Perl’s range operator isn’t associative, so a .. b is OK, but a .. b .. c is an error.
+
+TLA⁺ has both of these features!
+Instead of each operator having a place in some precedence hierarchy, they each 
 

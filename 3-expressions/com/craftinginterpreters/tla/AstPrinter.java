@@ -28,14 +28,15 @@ class AstPrinter implements Expr.Visitor<String> {
   }
 
   @Override
-  public string visitTernaryExpr(Expr.Ternary expr) {
+  public String visitTernaryExpr(Expr.Ternary expr) {
     return parenthesize(expr.operator.lexeme, expr.first,
                         expr.second, expr.third);
   }
 
   @Override
-  public String visitSetExpr(Expr.Set expr) {
-    return parenthesize("Set", expr.elements.toArray(Expr[]::new));
+  public String visitVariadicExpr(Expr.Variadic expr) {
+    return parenthesize(expr.operator.lexeme,
+                        expr.parameters.toArray(Expr[]::new));
   }
 
   private String parenthesize(String name, Expr... exprs) {

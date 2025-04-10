@@ -18,7 +18,7 @@ public class GenerateAst {
       "Literal  : Object value",
       "Unary    : Token operator, Expr expr",
       "Ternary  : Token operator, Expr first, Expr second, Expr third",
-      "Set      : List<Expr> elements"
+      "Variadic : Token operator, List<Expr> parameters"
     ));
   }
 

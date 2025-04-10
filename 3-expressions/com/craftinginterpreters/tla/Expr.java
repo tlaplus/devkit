@@ -9,7 +9,7 @@ abstract class Expr {
     R visitLiteralExpr(Literal expr);
     R visitUnaryExpr(Unary expr);
     R visitTernaryExpr(Ternary expr);
-    R visitSetExpr(Set expr);
+    R visitVariadicExpr(Variadic expr);
   }
   static class Binary extends Expr {
     Binary(Expr left, Token operator, Expr right) {
@@ -83,17 +83,19 @@ abstract class Expr {
     final Expr second;
     final Expr third;
   }
-  static class Set extends Expr {
-    Set(List<Expr> elements) {
-      this.elements = elements;
+  static class Variadic extends Expr {
+    Variadic(Token operator, List<Expr> parameters) {
+      this.operator = operator;
+      this.parameters = parameters;
     }
 
     @Override
     <R> R accept(Visitor<R> visitor) {
-      return visitor.visitSetExpr(this);
+      return visitor.visitVariadicExpr(this);
     }
 
-    final List<Expr> elements;
+    final Token operator;
+    final List<Expr> parameters;
   }
 
   abstract <R> R accept(Visitor<R> visitor);
