@@ -43,7 +43,7 @@ class Parser {
       Token operator = previous();
       Expr right = operatorExpression(op.highPrec + 1);
       expr = new Expr.Binary(expr, operator, right);
-      if (!op.assoc) break;
+      if (!op.assoc) return expr;
     }
 
     while ((op = matchOp(POSTFIX, prec)) != null) {
@@ -164,6 +164,12 @@ class Parser {
   }
 
   private void synchronize() {
-    return;
+    advance();
+
+    while(!isAtEnd()) {
+      if (previous().type == EQUAL_EQUAL) return;
+
+      advance();
+    }
   }
 }
