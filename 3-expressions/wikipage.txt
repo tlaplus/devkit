@@ -279,31 +279,289 @@ In [[https://craftinginterpreters.com/parsing-expressions.html|Chapter 6]], we f
 ==== Chapter 6.1: Ambiguity and the Parsing Game ====
 
 First, as in [[https://craftinginterpreters.com/parsing-expressions.html#ambiguity-and-the-parsing-game|section 6.1 of the book]], we have to disambiguate our grammar.
-Recall the first draft of our grammar for constant TLA⁺ expressions:
-
-<code eiffel>
-expression     → literal
-               | unary
-               | binary
-               | ternary
-               | variadic
-               | grouping ;
-
-literal        → NUMBER | "TRUE" | "FALSE" ;
-grouping       → "(" expression ")" ;
-unary          → (( "ENABLED" | "-" ) expression ) | ( expression "'" ) ;
-binary         → expression operator expression ;
-ternary        → "IF" expression "THEN" expression "ELSE" expression;
-variadic       → "{" ( expression ( "," expression )* )? "}"
-operator       → "=" | "+" | "-" | ".." | "/\" | "\/" | "<"  | "\in" ;
-</code>
-
 The way that precedence works in TLA⁺ is different from Lox, and indeed different from most other languages!
 One side-quote from this section of the book reads:
 
 >While not common these days, some languages specify that certain pairs of operators have no relative precedence. That makes it a syntax error to mix those operators in an expression without using explicit grouping.
+
 >Likewise, some operators are *non-associative*. That means it’s an error to use that operator more than once in a sequence. For example, Perl’s range operator isn’t associative, so a .. b is OK, but a .. b .. c is an error.
 
 TLA⁺ has both of these features!
-Instead of each operator having a place in some precedence hierarchy, they each 
+Instead of operators occupying a slot in some hierarchy of precedence, each operator has a precedence //range//.
+When the precedence ranges of two operators overlap it is a parse error.
+For example, the ''ENABLED'' prefix operator has precedence range 4-15, and the prime operator has precedence range 15-15; thus, the following expression has a precedence conflict and should not parse:
+<code>
+ENABLED x'
+</code>
+Users must add parentheses to indicate their desired grouping in the expression.
+Similarly, some operators like ''='' are not associative so ''a = b = c'' should be a parse error.
+Both of these factors combine to make our operator parsing code quite a bit different from that given in the book.
+Worry not, it can still be made terse and understandable!
+
+==== Chapter 6.2: Recursive Descent Parsing ====
+
+[[https://craftinginterpreters.com/parsing-expressions.html#recursive-descent-parsing|Section 6.2]] is where we start writing our parser in the recursive descent style.
+Recursive descent can seem a bit magical even if you're used to reasoning about recursive functions!
+Unfortunately TLA⁺ requires us to push this magic even further.
+Worry not, we'll take it step by step.
+
+We start with the same basic ''Parser.java'' file as in the book, only renaming ''lox'' to ''tla'' in the package name as usual:
+
+<code java [highlight_lines_extra="1,5"]>
+package com.craftinginterpreters.tla;
+
+import java.util.List;
+
+import static com.craftinginterpreters.tla.TokenType.*;
+
+class Parser {
+  private final List<Token> tokens;
+  private int current = 0;
+
+  Parser(List<Token> tokens) {
+    this.tokens = tokens;
+  }
+}
+</code>
+
+Now we hit our first major difference.
+In Lox, precedence is given by a small hierarchy of named rules like ''equality'', ''comparison'', ''term'', etc.
+TLA⁺ is more complicated than that.
+The full language has around 100 operators spanning precedences 1 to 15!
+If we wanted to match the book's style we'd have to write a tower of recursive functions like:
+<code java>
+private Expr operatorExpressionPrec1() { ... }
+private Expr operatorExpressionPrec2() { ... }
+private Expr operatorExpressionPrec3() { ... }
+...
+private Expr operatorExpressionPrec15() { ... }
+</code>
+where each ''operatorExpressionPrecN'' function parses all the prefix, infix, and postfix operators of precedence ''N'', and calls ''operatorExpressionPrecN+1''.
+Life is too short for this.
+Instead, we'll adopt a technique alluded to in the text:
+>If you wanted to do some clever Java 8, you could create a helper method for parsing a left-associative series of binary operators given a list of token types, and an operand method handle to simplify this redundant code.
+
+Here's the skeleton of our operator parsing function; the trick is to make the precedence a parameter to the function instead of a component of the name.
+Add this code after the ''Parser'' constructor:
+<code java>
+  private Expr expression() {
+    return operatorExpression(1);
+  }
+
+  private Expr operatorExpression(int prec) {
+    if (prec == 16) return primary();
+
+    Expr expr = operatorExpression(prec + 1);
+
+    return expr;
+  }
+</code>
+
+Before filling out ''operatorExpression'', we'll add the helper methods; these form an incredibly well-designed parsing API and are unchanged from the book:
+
+<code java>
+  private boolean match(TokenType... types) {
+    for (TokenType type : types) {
+      if (check(type)) {
+        advance();
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private boolean check(TokenType type) {
+    if (isAtEnd()) return false;
+    return peek().type == type;
+  }
+
+  private Token advance() {
+    if (!isAtEnd()) current++;
+    return previous();
+  }
+
+  private boolean isAtEnd() {
+    return peek().type == EOF;
+  }
+
+  private Token peek() {
+    return tokens.get(current);
+  }
+
+  private Token previous() {
+    return tokens.get(current - 1);
+  }
+</code>
+
+Now we have to define a table of operators with their details.
+For this, create a new file ''Operator.java'' containing a class recording operator fix type, token type, associativity, and precedence range:
+
+<code java>
+package com.craftinginterpreters.tla;
+
+enum Fix {
+  PREFIX, INFIX, POSTFIX
+}
+
+class Operator {
+  final Fix fix;
+  final TokenType token;
+  final boolean assoc;
+  final int lowPrec;
+  final int highPrec;
+
+  public Operator(Fix fix, TokenType token, boolean assoc,
+                  int lowPrec, int highPrec) {
+    this.fix = fix;
+    this.token = token;
+    this.assoc = assoc;
+    this.lowPrec = lowPrec;
+    this.highPrec = highPrec;
+  }
+}
+</code>
+
+For convenience, import the ''Fix'' enum values in ''Parser.java'' so they can be referenced directly:
+
+<code java [highlight_lines_extra="7"]>
+package com.craftinginterpreters.tla;
+
+import java.util.List;
+import java.util.ArrayList;
+
+import static com.craftinginterpreters.tla.TokenType.*;
+import static com.craftinginterpreters.tla.Fix.*;
+
+class Parser {
+</code>
+
+
+You can find operator attributes on page 271 of //[[https://lamport.azurewebsites.net/tla/book.html|Specifying Systems]]// by Leslie Lamport, or [[https://github.com/tlaplus/tlaplus/blob/13e5a39b5368a6da4906b8ed1c2c1114d2e7de15/tlatools/org.lamport.tlatools/src/tla2sany/parser/Operators.java#L130-L234|this TLA⁺ tools source file]].
+We use a small subset of these operators.
+Record their attributes in a table in ''Parser.java'', below the ''operatorExpression'' method:
+
+<code java>
+  private static final Operator[] operators = new Operator[] {
+    new Operator(PREFIX,  NEGATION,   true,   4,  4 ),
+    new Operator(PREFIX,  ENABLED,    false,  4,  15),
+    new Operator(PREFIX,  MINUS,      true,   12, 12),
+    new Operator(INFIX,   AND,        true,   3,  3 ),
+    new Operator(INFIX,   OR,         true,   3,  3 ),
+    new Operator(INFIX,   IN,         false,  5,  5 ),
+    new Operator(INFIX,   EQUAL,      false,  5,  5 ),
+    new Operator(INFIX,   LESS_THAN,  false,  5,  5 ),
+    new Operator(INFIX,   DOT_DOT,    false,  9,  9 ),
+    new Operator(INFIX,   PLUS,       true,   10, 10),
+    new Operator(INFIX,   MINUS,      true,   11, 11),
+    new Operator(POSTFIX, PRIME,      false,  15, 15),
+  };
+</code>
+
+Here's something a bit odd.
+In TLA⁺, the infix minus operator (subtraction) has higher precedence at 11-11 than the infix plus operator (addition) at 10-10!
+In grade school you probably learned acronyms like PEMDAS or BEDMAS to remember the order of operations in arithmetic.
+Really, you learned parsing rules!
+Now when writing our own parsing algorithm we come to understand that the order of these operations is not inscribed in the bedrock of mathematical truth but instead is a simple convention of mathematical notation.
+TLA⁺ subverts this by parsing the expression ''a + b - c'' as ''a + (b - c)'' instead of the PEMDAS-style ''(a + b) - c''.
+While this design decision is unusual, it is [[https://groups.google.com/g/tlaplus/c/Bt1fl8GvizE/m/ohYTfQWiCgAJ|unlikely to cause any problems]].
+
+We need one more helper method before we can start working on ''operatorExpression'': a superpowered ''match'' method specific to operators, which will try to match any operators of a given fix type & (low) precedence.
+Add this code above ''match'':
+<code java>
+  private Operator matchOp(Fix fix, int prec) {
+    for (Operator op : operators) {
+      if (op.fix == fix && op.lowPrec == prec) {
+        if (match(op.token)) return op;
+      }
+    }
+
+    return null;
+  }
+</code>
+
+Okay, we're all set for the main event!
+Here is how we modify our ''operatorExpression'' method to parse infix operators.
+You can see a strong resemblance to the infix operator parsing code given in the book (new lines highlighted):
+<code java [highlight_lines_extra="4,7,8,9,10,11"]>
+  private Expr operatorExpression(int prec) {
+    if (prec == 16) return primary();
+
+    Operator op;
+ 
+    Expr expr = operatorExpression(prec + 1);
+    while ((op = matchOp(INFIX, prec)) != null) {
+      Token operator = previous();
+      Expr right = operatorExpression(op.highPrec + 1);
+      expr = new Expr.Binary(expr, operator, right);
+    }
+ 
+    return expr;
+  }
+</code>
+
+We use Java's combined conditional-assignment atop the ''while'' loop to make our code more terse, both checking whether any operators were matched and getting details of the matched operator if so.
+The interior of the ''while'' loop is largely identical to infix parsing logic from the book, except for when we recurse to a higher precedence level: we go directly past the upper bound of the precedence range.
+It takes a bit of thinking to understand why this works for parsing expressions according to the precedence we want, but it does.
+Take a minute to ponder it.
+If you still don't get it, wait until we have a fully-functional expression parser then play around with this line to see how it changes the behavior.
+
+This code implements precedence ranges, but assumes all infix operators are associative.
+We need to modify the loop to break if the infix operator is not associative:
+<code java [highlight_lines_extra="5"]>
+    while ((op = matchOp(INFIX, prec)) != null) {
+      Token operator = previous();
+      Expr right = operatorExpression(op.highPrec + 1);
+      expr = new Expr.Binary(expr, operator, right);
+      if (!op.assoc) break;
+    }
+</code>
+
+And that's how we parse infix operators!
+That was the most complicated case, so let's move on to prefix operators.
+Again our code resembles the prefix operator parsing logic given in the book.
+Add this snippet near the top of the ''operatorExpression'' method:
+
+<code java [highlight_lines_extra="5,6,7,8,9,10"]>
+  private Expr operatorExpression(int prec) {
+    if (prec == 16) return primary();
+
+    Operator op;
+    if ((op = matchOp(PREFIX, prec)) != null) {
+      Token opToken = previous();
+      Expr expr = operatorExpression(
+                    op.assoc ? op.lowPrec : op.highPrec + 1);
+      return new Expr.Unary(opToken, expr);
+    }
+
+    Expr expr = operatorExpression(prec + 1);
+</code>
+
+Of note is the expression ''op.assoc ? op.lowPrec : op.highPrec + 1'' controlling the precedence level at which we recurse.
+To understand this expression, it is helpful to consider an example.
+The negative prefix operator ''-1'' is associative, so we should be able to parse the expression ''--1'' as ''-(-1)''.
+In order to do that after consuming the first ''-'' we have to recurse into ''operatorExpression'' //at the same precedence level//.
+Then we will consume the second ''-'', then again recurse and ultimately consume ''1'' in our yet-to-be-defined ''primary'' method.
+In contrast, the prefix operator ''ENABLED'' is not associative and has range 4-15.
+In that case we want to reject the expression ''ENABLED ENABLED TRUE'', so we recurse at a level higher than ''ENABLED'''s upper precedence bound.
+Thus the second ''ENABLED'' will not be matched and we will report a parse error using methods defined in chapter section 6.3.
+
+All that remains is to parse postfix operators.
+These are not covered in the book, but they pretty much resemble infix operators without matching an expression on the right-hand side of the operator.
+Add the highlighted code below the ''INFIX'' logic in ''operatorExpression'':
+
+<code java [highlight_lines_extra="3,4,5,6,7"]>
+    }
+
+    while ((op = matchOp(POSTFIX, prec)) != null) {
+      Token opToken = previous();
+      expr = new Expr.Unary(opToken, expr);
+      if (!op.assoc) break;
+    }
+
+    return expr
+  }
+</code>
+
+And that completes our operator parsing logic!
 

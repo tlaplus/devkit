@@ -4,44 +4,11 @@ import java.util.List;
 import java.util.ArrayList;
 
 import static com.craftinginterpreters.tla.TokenType.*;
+import static com.craftinginterpreters.tla.Fix.*;
 
 class Parser {
   private static class ParseError extends RuntimeException {}
-  
-  enum Fix {
-    PREFIX, INFIX, POSTFIX
-  }
-  static class Operator {
-    final Fix fix;
-    final TokenType token;
-    final boolean assoc;
-    final int lowPrec;
-    final int highPrec;
-    public Operator(Fix fix, TokenType token, boolean assoc,
-                    int lowPrec, int highPrec) {
-      this.fix = fix;
-      this.token = token;
-      this.assoc = assoc;
-      this.lowPrec = lowPrec;
-      this.highPrec = highPrec;
-    }
-  }
-  
-  private static final Operator[] operators = new Operator[] {
-    new Operator(Fix.PREFIX,  NEGATION,   true,   4,  4 ),
-    new Operator(Fix.PREFIX,  MINUS,      true,   12, 12),
-    new Operator(Fix.PREFIX,  ENABLED,    false,  4,  15),
-    new Operator(Fix.INFIX,   AND,        true,   3,  3 ),
-    new Operator(Fix.INFIX,   OR,         true,   3,  3 ),
-    new Operator(Fix.INFIX,   IN,         false,  5,  5 ),
-    new Operator(Fix.INFIX,   EQUAL,      false,  5,  5 ),
-    new Operator(Fix.INFIX,   LESS_THAN,  false,  5,  5 ),
-    new Operator(Fix.INFIX,   DOT_DOT,    false,  9,  9 ),
-    new Operator(Fix.INFIX,   PLUS,       true,   10, 10),
-    new Operator(Fix.INFIX,   MINUS,      true,   11, 11),
-    new Operator(Fix.POSTFIX, PRIME,      false,  15, 15),
-  };
-  
+
   private final List<Token> tokens;
   private int current = 0;
 
@@ -60,36 +27,26 @@ class Parser {
   private Expr expression() {
     return operatorExpression(1);
   }
-  
-  private Operator matchOp(int prec, Fix fix) {
-    for (Operator op : operators) {
-      if (op.lowPrec == prec && op.fix == fix && match(op.token)) {
-        return op;
-      }
-    }
 
-    return null;
-  }
-  
   private Expr operatorExpression(int prec) {
     if (prec == 16) return primary();
 
     Operator op;
-    if ((op = matchOp(prec, Fix.PREFIX)) != null) {
+    if ((op = matchOp(PREFIX, prec)) != null) {
       Token opToken = previous();
       Expr expr = operatorExpression(op.assoc ? op.lowPrec : op.highPrec + 1);
       return new Expr.Unary(opToken, expr);
     }
 
     Expr expr = operatorExpression(prec + 1);
-    while ((op = matchOp(prec, Fix.INFIX)) != null) {
+    while ((op = matchOp(INFIX, prec)) != null) {
       Token operator = previous();
-      Expr right = operatorExpression(prec + 1);
+      Expr right = operatorExpression(op.highPrec + 1);
       expr = new Expr.Binary(expr, operator, right);
       if (!op.assoc) break;
     }
-    
-    while ((op = matchOp(prec, Fix.POSTFIX)) != null) {
+
+    while ((op = matchOp(POSTFIX, prec)) != null) {
       Token opToken = previous();
       expr = new Expr.Unary(opToken, expr);
       if (!op.assoc) break;
@@ -97,7 +54,7 @@ class Parser {
 
     return expr;
   }
-  
+
   private Expr primary() {
     if (match(FALSE)) return new Expr.Literal(false);
     if (match(TRUE)) return new Expr.Literal(true);
@@ -135,6 +92,31 @@ class Parser {
     }
 
     throw error(peek(), "Expect expression.");
+  }
+
+  private static final Operator[] operators = new Operator[] {
+    new Operator(PREFIX,  NEGATION,   true,   4,  4 ),
+    new Operator(PREFIX,  ENABLED,    false,  4,  15),
+    new Operator(PREFIX,  MINUS,      true,   12, 12),
+    new Operator(INFIX,   AND,        true,   3,  3 ),
+    new Operator(INFIX,   OR,         true,   3,  3 ),
+    new Operator(INFIX,   IN,         false,  5,  5 ),
+    new Operator(INFIX,   EQUAL,      false,  5,  5 ),
+    new Operator(INFIX,   LESS_THAN,  false,  5,  5 ),
+    new Operator(INFIX,   DOT_DOT,    false,  9,  9 ),
+    new Operator(INFIX,   PLUS,       true,   10, 10),
+    new Operator(INFIX,   MINUS,      true,   11, 11),
+    new Operator(POSTFIX, PRIME,      false,  15, 15),
+  };
+
+  private Operator matchOp(Fix fix, int prec) {
+    for (Operator op : operators) {
+      if (op.fix == fix && op.lowPrec == prec) {
+        if (match(op.token)) return op;
+      }
+    }
+
+    return null;
   }
 
   private boolean match(TokenType... types) {
@@ -185,4 +167,3 @@ class Parser {
     return;
   }
 }
-
