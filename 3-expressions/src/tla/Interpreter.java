@@ -11,7 +11,7 @@ import tla.Expr.Unary;
 import tla.Expr.Variadic;
 
 class Interpreter implements Expr.Visitor<Object> {
-  
+
   void interpret(Expr expression) {
     try {
       Object value = evaluate(expression);
@@ -20,11 +20,11 @@ class Interpreter implements Expr.Visitor<Object> {
       TlaPlus.runtimeError(error);
     }
   }
-  
+
   private Object evaluate(Expr expr) {
     return expr.accept(this);
   }
-  
+
   @Override
   public Object visitBinaryExpr(Binary expr) {
     Object left = evaluate(expr.left);
@@ -38,7 +38,7 @@ class Interpreter implements Expr.Visitor<Object> {
       default:
         break;
     }
-    
+
     Object right = evaluate(expr.right);
     switch (expr.operator.type) {
       case MINUS:
@@ -58,8 +58,9 @@ class Interpreter implements Expr.Visitor<Object> {
           return (boolean)left == (boolean)right;
         }
         if (left instanceof Set<?> && right instanceof Set<?>) {
-          return setEquals((Set<?>)left, (Set<?>)right);
+          return left.equals(right);
         }
+        throw new RuntimeError(expr.operator, "Incomparable operands.");
       case DOT_DOT:
         checkNumberOperands(expr.operator, left, right);
         Set<Object> set = new HashSet<Object>();
@@ -76,7 +77,7 @@ class Interpreter implements Expr.Visitor<Object> {
         return (boolean)left || (boolean)right;
       case IN:
         checkSetOperand(expr.operator, right);
-        return setContains(left, (Set<?>)right);
+        return ((Set<?>)right).contains(left);
       default:
         // Unreachable.
         return null;
@@ -96,7 +97,7 @@ class Interpreter implements Expr.Visitor<Object> {
   @Override
   public Object visitUnaryExpr(Unary expr) {
     Object operand = evaluate(expr.expr);
-    
+
     switch (expr.operator.type) {
       case MINUS:
         checkNumberOperand(expr.operator, operand);
@@ -122,7 +123,7 @@ class Interpreter implements Expr.Visitor<Object> {
         Object conditional = evaluate(expr.first);
         checkBooleanOperand(expr.operator, conditional);
         return (boolean)conditional ?
-            evaluate(expr.second) : evaluate(expr.third); 
+            evaluate(expr.second) : evaluate(expr.third);
       default:
         // Unreachable.
         return null;
@@ -143,35 +144,11 @@ class Interpreter implements Expr.Visitor<Object> {
         return null;
     }
   }
-  
+
   private String stringify(Object object) {
     return object.toString();
   }
 
-  private static boolean setContains(Object candidate, Set<?> set) {
-    return set.stream().anyMatch((Object element) -> {
-      if (candidate instanceof Integer && element instanceof Integer) {
-        return (int)candidate == (int)element;
-      }
-      if (candidate instanceof Boolean && element instanceof Boolean) {
-        return (boolean)candidate == (boolean)element;
-      }
-      if (candidate instanceof Set<?> && element instanceof Set<?>) {
-        return setEquals((Set<?>)candidate, (Set<?>)element);
-      }
-      return false;
-    });
-  }
-  
-  private static boolean setEquals(Set<?> left, Set<?> right) {
-    if (left.size() != right.size()) {
-      return false;
-    }
-    
-    return left.stream().allMatch(
-        (Object element) -> setContains(element, right));
-  }
-  
   private void checkNumberOperand(Token operator, Object operand) {
     if (operand instanceof Integer) return;
     throw new RuntimeError(operator, "Operand must be a number.");
@@ -183,7 +160,7 @@ class Interpreter implements Expr.Visitor<Object> {
 
     throw new RuntimeError(operator, "Operands must be numbers.");
   }
-  
+
   private void checkBooleanOperand(Token operator, Object operand) {
     if (operand instanceof Boolean) return;
     throw new RuntimeError(operator, "Operand must be a boolean.");
@@ -193,7 +170,7 @@ class Interpreter implements Expr.Visitor<Object> {
     if (left instanceof Boolean && right instanceof Boolean) return;
     throw new RuntimeError(operator, "Operands must be booleans.");
   }
-  
+
   private void checkSetOperand(Token operator, Object operand) {
     if (operand instanceof Set<?>) return;
     throw new RuntimeError(operator, "Operand must be a set.");

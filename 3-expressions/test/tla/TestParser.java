@@ -12,15 +12,15 @@ public class TestParser {
     String actual = new AstPrinter().print(p.parse());
     assertEquals(expected, actual);
   }
-  
+
   private static void checkError(String input) {
     Scanner s = new Scanner(input);
     Parser p = new Parser(s.scanTokens());
     assertNull(p.parse());
   }
-  
+
   @Test
-  public void testLiteralExpression() {
+  public void testLiteralExpressions() {
     checkEqual("TRUE", "true");
     checkEqual("FALSE", "false");
     checkEqual("123", "123");
@@ -35,7 +35,7 @@ public class TestParser {
     checkEqual("1'", "(' 1)");
     checkEqual("ENABLED 1", "(ENABLED 1)");
   }
-  
+
   @Test
   public void testUnaryAssociativity() {
     checkEqual("~~1", "(~ (~ 1))");
@@ -53,7 +53,7 @@ public class TestParser {
     checkEqual("1 + 1", "(+ 1 1)");
     checkEqual("1 - 1", "(- 1 1)");
   }
-  
+
   @Test
   public void testBinaryAssociativity() {
     checkEqual("1 + 2 + 3", "(+ (+ 1 2) 3)");
@@ -76,7 +76,7 @@ public class TestParser {
     checkEqual("-1'", "(- (' 1))");
     checkEqual("-1 + 2'", "(+ (- 1) (' 2))");
   }
-  
+
   @Test
   public void testAssociativityErrors() {
     checkError("ENABLED ENABLED TRUE");
@@ -87,7 +87,7 @@ public class TestParser {
     checkEqual("(1)", "(group 1)");
     checkEqual("(1 + (2 + 3))", "(group (+ 1 (group (+ 2 3))))");
   }
-  
+
   @Test
   public void testIfThenElse() {
     checkEqual("IF TRUE THEN 1 ELSE 2", "(IF true 1 2)");
@@ -95,7 +95,7 @@ public class TestParser {
     checkEqual("IF TRUE THEN IF TRUE THEN 1 ELSE 2 ELSE 2", "(IF true (IF true 1 2) 2)");
     checkEqual("IF TRUE THEN 1 ELSE IF TRUE THEN 1 ELSE 2", "(IF true 1 (IF true 1 2))");
   }
-  
+
   @Test
   public void testSetConstructor() {
     checkEqual("{}", "({)");
