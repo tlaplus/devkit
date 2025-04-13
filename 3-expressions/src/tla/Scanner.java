@@ -48,7 +48,7 @@ class Scanner {
       case '-': addToken(MINUS); break;
       case '+': addToken(PLUS); break;
       case '<': addToken(LESS_THAN); break;
-      case '~': addToken(NEGATION); break;
+      case '~': addToken(NOT); break;
       case '\'': addToken(PRIME); break;
       case '=':
         addToken(match('=') ? EQUAL_EQUAL : EQUAL);
@@ -108,8 +108,8 @@ class Scanner {
     symbols.put("\\A",        FOR_ALL);
     symbols.put("\\forall",   FOR_ALL);
     symbols.put("\\in",       IN);
-    symbols.put("\\lnot",     NEGATION);
-    symbols.put("\\neg",      NEGATION);
+    symbols.put("\\lnot",     NOT);
+    symbols.put("\\neg",      NOT);
     symbols.put("\\lor",      OR);
   }
 

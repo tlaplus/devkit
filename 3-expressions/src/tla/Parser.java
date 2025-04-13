@@ -95,7 +95,7 @@ class Parser {
   }
 
   private static final Operator[] operators = new Operator[] {
-    new Operator(PREFIX,  NEGATION,   true,   4,  4 ),
+    new Operator(PREFIX,  NOT,        true,   4,  4 ),
     new Operator(PREFIX,  ENABLED,    false,  4,  15),
     new Operator(PREFIX,  MINUS,      true,   12, 12),
     new Operator(INFIX,   AND,        true,   3,  3 ),

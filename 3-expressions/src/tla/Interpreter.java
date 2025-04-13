@@ -104,7 +104,7 @@ class Interpreter implements Expr.Visitor<Object> {
       case ENABLED:
         checkBooleanOperand(expr.operator, operand);
         return (boolean)operand;
-      case NEGATION:
+      case NOT:
         checkBooleanOperand(expr.operator, operand);
         return !(boolean)operand;
       case PRIME:
