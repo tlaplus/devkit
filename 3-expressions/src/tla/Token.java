@@ -1,4 +1,4 @@
-package com.craftinginterpreters.tla;
+package tla;
 
 class Token {
   final TokenType type;

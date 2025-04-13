@@ -1,4 +1,4 @@
-package com.craftinginterpreters.tla;
+package tla;
 
 enum Fix {
   PREFIX, INFIX, POSTFIX

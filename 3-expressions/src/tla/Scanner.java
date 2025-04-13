@@ -1,11 +1,11 @@
-package com.craftinginterpreters.tla;
+package tla;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.craftinginterpreters.tla.TokenType.*;
+import static tla.TokenType.*;
 
 class Scanner {
   private final String source;

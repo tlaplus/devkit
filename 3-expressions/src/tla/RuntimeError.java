@@ -1,4 +1,4 @@
-package com.craftinginterpreters.tla;
+package tla;
 
 class RuntimeError extends RuntimeException {
   final Token token;

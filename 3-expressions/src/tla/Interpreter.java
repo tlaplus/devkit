@@ -1,14 +1,14 @@
-package com.craftinginterpreters.tla;
+package tla;
 
 import java.util.Set;
 import java.util.HashSet;
 
-import com.craftinginterpreters.tla.Expr.Binary;
-import com.craftinginterpreters.tla.Expr.Grouping;
-import com.craftinginterpreters.tla.Expr.Literal;
-import com.craftinginterpreters.tla.Expr.Ternary;
-import com.craftinginterpreters.tla.Expr.Unary;
-import com.craftinginterpreters.tla.Expr.Variadic;
+import tla.Expr.Binary;
+import tla.Expr.Grouping;
+import tla.Expr.Literal;
+import tla.Expr.Ternary;
+import tla.Expr.Unary;
+import tla.Expr.Variadic;
 
 class Interpreter implements Expr.Visitor<Object> {
   

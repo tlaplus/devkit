@@ -1,4 +1,4 @@
-package com.craftinginterpreters.tla;
+package tla;
 
 import java.io.BufferedReader;
 import java.io.IOException;

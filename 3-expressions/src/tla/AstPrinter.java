@@ -1,4 +1,4 @@
-package com.craftinginterpreters.tla;
+package tla;
 
 class AstPrinter implements Expr.Visitor<String> {
   String print(Expr expr) {

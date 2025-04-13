@@ -1,10 +1,10 @@
-package com.craftinginterpreters.tla;
+package tla;
 
 import java.util.List;
 import java.util.ArrayList;
 
-import static com.craftinginterpreters.tla.TokenType.*;
-import static com.craftinginterpreters.tla.Fix.*;
+import static tla.TokenType.*;
+import static tla.Fix.*;
 
 class Parser {
   private static class ParseError extends RuntimeException {}
