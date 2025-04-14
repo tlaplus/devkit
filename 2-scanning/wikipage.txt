@@ -1,17 +1,17 @@
-====== Scanning TLA⁺ Tokens ======
+======= Scanning TLA⁺ Tokens =======
 
 This page corresponds to [[https://craftinginterpreters.com/scanning.html|chapter 4]] of //Crafting Interpreters// by Robert Nystrom, henceforth referred to as "the book".
 We will learn how to chunk up TLA⁺ source file string input into a series of tokens suitable for parsing.
 For each section in the chapter, first read the section in the book and then read the corresponding section tutorial on this page to see how to adapt the concepts to TLA⁺.
 
-==== Section 4.1: The Interpreter Framework ====
+====== Section 4.1: The Interpreter Framework ======
 
 Almost everything in [[https://craftinginterpreters.com/scanning.html#the-interpreter-framework|section 4.1]] can be left unchanged from what's given, although of course it makes sense to change some of the names from "Lox" to "TlaPlus" or similar.
 We do make one small functional modification: TLA⁺ source files are assumed to be encoded in UTF-8, a variable-width ASCII-compatible encoding, so we specify that when performing the file read.
 Here's our main file, ''TlaPlus.java'':
 
 <code java [enable_line_numbers="true",highlight_lines_extra="1,6,11,27"]>
-package com.craftinginterpreters.tla;
+package tla;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -79,20 +79,20 @@ public class TlaPlus {
 }
 </code>
 
-==== Section 4.2: Lexemes and Tokens ====
+====== Section 4.2: Lexemes and Tokens ======
 
 The ''TokenType'' class in [[https://craftinginterpreters.com/scanning.html#lexemes-and-tokens|section 4.2]] is our first major departure from the book.
 Instead of Lox tokens, we use the atomic components of our minimal TLA⁺ language subset.
 Adapting the snippet in [[https://craftinginterpreters.com/scanning.html#token-type|section 4.2.1]] we get:
 
 <code java [enable_line_numbers="true"]>
-package com.craftinginterpreters.tla;
+package tla;
 
 enum TokenType {
   // Single-character tokens.
   LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE,
   LEFT_BRACKET, RIGHT_BRACKET, COMMA, COLON,
-  MINUS, PLUS, LESS_THAN, NEGATION, PRIME,
+  MINUS, PLUS, LESS_THAN, NOT, PRIME,
 
   // Short fixed-length tokens.
   EQUAL, EQUAL_EQUAL, AND, OR, DOT_DOT, ALL_MAP_TO,
@@ -120,7 +120,7 @@ In [[https://craftinginterpreters.com/scanning.html#location-information|section
 This will come in useful when parsing vertically-aligned conjunction & disjunction lists.
 
 <code java [enable_line_numbers="true",highlight_lines_extra="8,10,15"]>
-package com.craftinginterpreters.tla;
+package tla;
 
 class Token {
   final TokenType type;
@@ -143,20 +143,20 @@ class Token {
 }
 </code>
 
-==== Section 4.4: The Scanner Class ====
+====== Section 4.4: The Scanner Class ======
 
 Nothing in section 4.3 requires modification, so we can move on to the very important ''Scanner'' class in [[https://craftinginterpreters.com/scanning.html#the-scanner-class|section 4.4]].
 Our first modification to the code given in the book is to track the column in addition to the line, mirroring our addition to the ''Token'' class:
 
 <code java [enable_line_numbers="true",highlight_lines_extra="1,8,16,29"]>
-package com.craftinginterpreters.tla;
+package tla;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.craftinginterpreters.tla.TokenType.*;
+import static tla.TokenType.*;
 
 class Scanner {
   private final String source;
@@ -187,7 +187,7 @@ class Scanner {
 }
 </code>
 
-==== Section 4.5: Recognizing Lexemes ====
+====== Section 4.5: Recognizing Lexemes ======
 
 [[https://craftinginterpreters.com/scanning.html#recognizing-lexemes|Section 4.5]] finally gets around to actually handling text input!
 Of course, our unambiguous single-character lexing code in ''scanToken'' has some differences (including the removal of Lox tokens ''DOT'', ''SEMICOLON'', and ''STAR'').
@@ -208,7 +208,7 @@ Note also that we increment the column position in ''advance()'', and there is s
       case '-': addToken(MINUS); break;
       case '+': addToken(PLUS); break;
       case '<': addToken(LESS_THAN); break;
-      case '~': addToken(NEGATION); break;
+      case '~': addToken(NOT); break;
       case '\'': addToken(PRIME); break;
       default:
         TlaPlus.error(line, "Unexpected character.");
@@ -284,7 +284,7 @@ You might be wondering why we didn't write the ''\'' case using ''consume(char)'
   }
 </code>
 
-==== Section 4.6: Longer Lexemes ====
+====== Section 4.6: Longer Lexemes ======
 
 In [[https://craftinginterpreters.com/scanning.html#longer-lexemes|section 4.6]] we learn how to handle lexemes of longer or unlimited length.
 Let's begin with single-line comments, which in TLA⁺ start with ''\*'' (new code highlighted):
@@ -368,7 +368,7 @@ We're only handling whole natural numbers, no decimals, so our ''number()'' meth
   }
 </code>
 
-==== Section 4.7: Reserved Words and Identifiers ====
+====== Section 4.7: Reserved Words and Identifiers ======
 
 In [[https://craftinginterpreters.com/scanning.html#reserved-words-and-identifiers|section 4.7]] we learn to lex general identifiers; start by modifying the ''default'' case of the ''scanToken()'' method:
 
@@ -472,8 +472,8 @@ Then define the symbol map and ''symbol()'' helper - we can also throw in a few 
     symbols.put("\\A",        FOR_ALL);
     symbols.put("\\forall",   FOR_ALL);
     symbols.put("\\in",       IN);
-    symbols.put("\\lnot",     NEGATION);
-    symbols.put("\\neg",      NEGATION);
+    symbols.put("\\lnot",     NOT);
+    symbols.put("\\neg",      NOT);
     symbols.put("\\lor",      OR);
   }
 
@@ -507,11 +507,11 @@ EOF  null
 
 Isn't it amazing how quickly this is coming together?
 The simplicity of the required code is one of the great wonders of language implementation.
-If you got lost somewhere along the way, you can find a snapshot of the code on this page [[https://github.com/tlaplus-community/tlaplus-creator/tree/main/scanning|here]].
+If you got lost somewhere along the way, you can find a snapshot of the code on this page [[https://github.com/tlaplus-community/tlaplus-creator/tree/main/2-scanning|here]].
 Next we learn how to collect our tokens into a parse tree!
 Continue the tutorial at [[creating:expressions|Parsing TLA⁺ Expressions]].
 
-===== Challenges =====
+====== Challenges ======
 
 Here are some optional challenges to flesh out your TLA⁺ scanner, roughly ranked from simplest to most difficult.
 You should save a copy of your code before attempting these.
