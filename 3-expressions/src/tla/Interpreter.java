@@ -51,22 +51,13 @@ class Interpreter implements Expr.Visitor<Object> {
         checkNumberOperands(expr.operator, left, right);
         return (int)left < (int)right;
       case EQUAL:
-        if (left instanceof Integer && right instanceof Integer) {
-          return (int)left == (int)right;
-        }
-        if (left instanceof Boolean && right instanceof Boolean) {
-          return (boolean)left == (boolean)right;
-        }
-        if (left instanceof Set<?> && right instanceof Set<?>) {
-          return left.equals(right);
-        }
-        throw new RuntimeError(expr.operator, "Incomparable operands.");
+        return left.equals(right);
       case DOT_DOT:
         checkNumberOperands(expr.operator, left, right);
         Set<Object> set = new HashSet<Object>();
         int lower = (int)left;
         int higher = (int)right;
-        if (lower < higher) {
+        if (lower <= higher) {
           for (int i = lower; i <= higher; i++) {
             set.add(i);
           }

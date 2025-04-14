@@ -7,7 +7,7 @@ import java.io.PrintStream;
 
 import org.junit.jupiter.api.Test;
 
-public class TestInterpreter {
+public class TestExpressionEvaluation {
   private static String interpret(String input) {
     Scanner s = new Scanner(input);
     Parser p = new Parser(s.scanTokens());
@@ -55,6 +55,8 @@ public class TestInterpreter {
     assertEquals("false", interpret("FALSE \\/ FALSE"));
     assertEquals("true", interpret("1 \\in {1,2,3}"));
     assertEquals("[1, 2, 3]", interpret("1 .. 3"));
+    assertEquals("[]", interpret("3 .. 1"));
+    assertEquals("[3]", interpret("3 .. 3"));
     assertEquals("true", interpret("1 < 2"));
     assertEquals("false", interpret("2 < 1"));
     assertEquals("true", interpret("1 = 1"));
@@ -63,6 +65,11 @@ public class TestInterpreter {
     assertEquals("false", interpret("FALSE = TRUE"));
     assertEquals("true", interpret("(1 .. 3) = {1, 2, 3}"));
     assertEquals("false", interpret("(1 .. 3) = {1, 2}"));
+  }
+
+  @Test
+  public void testShortCircuitEvaluation() {
+    assertEquals("false", interpret("FALSE /\\ 123"));
   }
 
   @Test
@@ -95,5 +102,13 @@ public class TestInterpreter {
     assertEquals("true", interpret("{{}, 0..2} = {{0,1,2}, {}}"));
     assertEquals("true", interpret("{TRUE, 0..2, {{}}} = {{0,1,2}, ~FALSE, {{}}}"));
     assertEquals("true", interpret("{TRUE, 0..2, {{}}} \\in {{{0,1,2}, ~FALSE, {{}}}}"));
+  }
+
+  @Test
+  public void testEquality() {
+    assertEquals("false", interpret("1 = TRUE"));
+    assertEquals("false", interpret("FALSE = 2"));
+    assertEquals("false", interpret("1 = {}"));
+    assertEquals("false", interpret("TRUE = {}"));
   }
 }
