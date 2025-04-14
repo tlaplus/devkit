@@ -848,7 +848,7 @@ Here's how we define our basic binary arithmetic & comparison operators; add a '
   @Override
   public Object visitBinaryExpr(Expr.Binary expr) {
     Object left = evaluate(expr.left);
-    Object right = evaluate(expr.right); 
+    Object right = evaluate(expr.right);
 
     switch (expr.operator.type) {
       case MINUS:
@@ -994,6 +994,219 @@ Finally, here's how we define the set construction operator; add this ''visitVar
 </code>
 
 ===== Section 7.3: Runtime Errors =====
+
+In [[https://craftinginterpreters.com/evaluating-expressions.html#runtime-errors|section 7.3]] we add some error detection & reporting to our interpreter code.
+
+Here's our variant of the ''checkNumberOperand()'' and ''checkNumberOperands()'' methods given in the book, using ''Integer'' instead of ''Double''; put these in the ''Interpreter'' class:
+
+<code java [highlight_lines_extra="2,8"]>
+  private void checkNumberOperand(Token operator, Object operand) {
+    if (operand instanceof Integer) return;
+    throw new RuntimeError(operator, "Operand must be a number.");
+  }
+
+  private void checkNumberOperands(Token operator,
+                                   Object left, Object right) {
+    if (left instanceof Integer && right instanceof Integer) return;
+
+    throw new RuntimeError(operator, "Operands must be numbers.");
+  }
+</code>
+
+Create a new ''RuntimeError.java'' file.
+Contents are identical to that give in the book except for the package name:
+
+<code java [highlight_lines_extra="1"]>
+package tla;
+
+class RuntimeError extends RuntimeException {
+  final Token token;
+
+  RuntimeError(Token token, String message) {
+    super(message);
+    this.token = token;
+  }
+}
+</code>
+
+We also need some helpers for boolean operator parameters since TLA⁺ is more strict about that; add these to the ''Interpreter'' class:
+
+<code java>
+  private void checkBooleanOperand(Token operator, Object operand) {
+    if (operand instanceof Boolean) return;
+    throw new RuntimeError(operator, "Operand must be a boolean.");
+  }
+
+  private void checkBooleanOperands(Token operator, Object left, Object right) {
+    if (left instanceof Boolean && right instanceof Boolean) return;
+    throw new RuntimeError(operator, "Operands must be booleans.");
+  }
+</code>
+
+Finally, we need a helper for checking whether an operand is a set:
+
+<code java>
+  private void checkSetOperand(Token operator, Object operand) {
+    if (operand instanceof Set<?>) return;
+    throw new RuntimeError(operator, "Operand must be a set.");
+  }
+</code>
+
+Now add these checks to our interpreter code.
+Here's negative:
+<code java [highlight_lines_extra="2"]>
+      case MINUS:
+        checkNumberOperand(expr.operator, operand);
+        return -(int)operand;
+</code>
+Logical not:
+<code java [highlight_lines_extra="2"]>
+      case NOT:
+        checkBooleanOperand(expr.operator, operand);
+        return !(boolean)operand;
+</code>
+Enabled:
+<code java [highlight_lines_extra="2"]>
+      case ENABLED:
+        checkBooleanOperand(expr.operator, operand);
+        return (boolean)operand;
+</code>
+Subtraction:
+<code java [highlight_lines_extra="2"]>
+      case MINUS:
+        checkNumberOperands(expr.operator, left, right);
+        return (int)left - (int)right;
+</code>
+Addition:
+<code java [highlight_lines_extra="2"]>
+      case PLUS:
+        checkNumberOperands(expr.operator, left, right);
+        return (int)left + (int)right;
+</code>
+Less than:
+<code java [highlight_lines_extra="2"]>
+      case LESS_THAN:
+        checkNumberOperands(expr.operator, left, right);
+        return (int)left < (int)right;
+</code>
+The ''..'' range set constructor:
+<code java [highlight_lines_extra="2"]>
+      case DOT_DOT:
+        checkNumberOperands(expr.operator, left, right);
+        Set<Object> set = new HashSet<Object>();
+</code>
+Set membership:
+<code java [highlight_lines_extra="2"]>
+      case IN:
+        checkSetOperand(expr.operator, right);
+        return ((Set<?>)right).contains(left);
+</code>
+Disjunction:
+<code java [highlight_lines_extra="2"]>
+      case OR:
+        checkBooleanOperands(expr.operator, left, right);
+        return (boolean)left || (boolean)right;
+</code>
+Conjunction:
+<code java [highlight_lines_extra="2,5"]>
+      case AND:
+        checkBooleanOperand(expr.operator, left);
+        if (!(boolean)left) return false;
+        Object right = evaluate(expr.right);
+        checkBooleanOperand(expr.operator, right);
+        return (boolean)right;
+</code>
+Finally, ''IF''/''THEN''/''ELSE'':
+<code java [highlight_lines_extra="3"]>
+      case IF:
+        Object conditional = evaluate(expr.first);
+        checkBooleanOperand(expr.operator, conditional);
+        return (boolean)conditional ?
+            evaluate(expr.second) : evaluate(expr.third);
+</code>
+
+===== Section 7.4: Hooking Up the Interpreter =====
+
+We're very close!
+In [[https://craftinginterpreters.com/evaluating-expressions.html#hooking-up-the-interpreter|section 7.4]] we put in the finishing touches to get to a real running TLA⁺ REPL!
+First, add this public ''interpret()'' method to the ''Interpreter'' class; highlighted line shows a difference from the book:
+<code java [highlight_lines_extra="6"]>
+  void interpret(Expr expression) { 
+    try {
+      Object value = evaluate(expression);
+      System.out.println(stringify(value));
+    } catch (RuntimeError error) {
+      TlaPlus.runtimeError(error);
+    }
+  }
+</code>
+
+In contrast to the book, our ''stringify()'' method is very simple; add this to the ''Interpreter'' class:
+
+<code java>
+  private String stringify(Object object) {
+    return object.toString();
+  }
+</code>
+
+Add a ''runtimeError()'' method to your main ''TlaPlus'' class after ''error()'':
+
+<code java>
+  static void runtimeError(RuntimeError error) {
+    System.err.println(error.getMessage() +
+        "\n[line " + error.token.line + "]");
+    hadRuntimeError = true;
+  }
+</code>
+
+Then add a static ''hadRuntimeError'' field to the ''TlaPlus'' class:
+
+<code java [highlight_lines_extra="2"]>
+  static boolean hadError = false;
+  static boolean hadRuntimeError = false;
+
+  public static void main(String[] args) throws IOException {
+</code>
+
+And exit from the ''runFile()'' method with a particular error code if a runtime error occurs:
+
+<code java [highlight_lines_extra="5"]>
+    run(new String(bytes, StandardCharsets.UTF_8));
+
+    // Indicate an error in the exit code.
+    if (hadError) System.exit(65);
+    if (hadRuntimeError) System.exit(70);
+  }
+</code>
+
+Finally, create a static ''Interpreter'' instance at the top of the ''TlaPlus'' class:
+
+<code java [highlight_lines_extra="2"]>
+public class TlaPlus {
+  private static final Interpreter interpreter = new Interpreter();
+  static boolean hadError = false;
+</code>
+
+Then finish it off by actually interpreting the expression given by the user; add this in the ''run()'' method in the ''TlaPlus'' class:
+
+<code java [highlight_lines_extra="4"]>
+    // Stop if there was a syntax error.
+    if (hadError) return;
+
+    interpreter.interpret(expression);
+  }
+</code>
+
+Voila!
+Your program will now interpret any constant TLA⁺ expression you provide it!
+Try it out:
+<code>
+> {0 .. 2, IF TRUE THEN 1 ELSE 2, {}}
+[[], 1, [0, 1, 2]]
+</code>
+
+If you got out of sync, you can find a snapshot of the expected state of the code in [[https://github.com/tlaplus-community/tlaplus-creator/tree/main/3-expressions|this repo directory]].
+Next tutorial: [[https://docs.tlapl.us/creating:statements|Handle TLA⁺ Statements]]!
 
 ====== Challenges ======
 
