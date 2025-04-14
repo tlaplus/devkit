@@ -3,13 +3,6 @@ package tla;
 import java.util.Set;
 import java.util.HashSet;
 
-import tla.Expr.Binary;
-import tla.Expr.Grouping;
-import tla.Expr.Literal;
-import tla.Expr.Ternary;
-import tla.Expr.Unary;
-import tla.Expr.Variadic;
-
 class Interpreter implements Expr.Visitor<Object> {
 
   void interpret(Expr expression) {
@@ -26,7 +19,7 @@ class Interpreter implements Expr.Visitor<Object> {
   }
 
   @Override
-  public Object visitBinaryExpr(Binary expr) {
+  public Object visitBinaryExpr(Expr.Binary expr) {
     Object left = evaluate(expr.left);
     switch (expr.operator.type) {
       case AND:
@@ -41,17 +34,9 @@ class Interpreter implements Expr.Visitor<Object> {
 
     Object right = evaluate(expr.right);
     switch (expr.operator.type) {
-      case MINUS:
-        checkNumberOperands(expr.operator, left, right);
-        return (int)left - (int)right;
-      case PLUS:
-        checkNumberOperands(expr.operator, left, right);
-        return (int)left + (int)right;
-      case LESS_THAN:
-        checkNumberOperands(expr.operator, left, right);
-        return (int)left < (int)right;
-      case EQUAL:
-        return left.equals(right);
+      case OR:
+        checkBooleanOperands(expr.operator, left, right);
+        return (boolean)left || (boolean)right;
       case DOT_DOT:
         checkNumberOperands(expr.operator, left, right);
         Set<Object> set = new HashSet<Object>();
@@ -63,12 +48,20 @@ class Interpreter implements Expr.Visitor<Object> {
           }
         }
         return set;
-      case OR:
-        checkBooleanOperands(expr.operator, left, right);
-        return (boolean)left || (boolean)right;
       case IN:
         checkSetOperand(expr.operator, right);
         return ((Set<?>)right).contains(left);
+      case MINUS:
+        checkNumberOperands(expr.operator, left, right);
+        return (int)left - (int)right;
+      case PLUS:
+        checkNumberOperands(expr.operator, left, right);
+        return (int)left + (int)right;
+      case LESS_THAN:
+        checkNumberOperands(expr.operator, left, right);
+        return (int)left < (int)right;
+      case EQUAL:
+        return left.equals(right);
       default:
         // Unreachable.
         return null;
@@ -76,31 +69,31 @@ class Interpreter implements Expr.Visitor<Object> {
   }
 
   @Override
-  public Object visitGroupingExpr(Grouping expr) {
+  public Object visitGroupingExpr(Expr.Grouping expr) {
     return evaluate(expr.expression);
   }
 
   @Override
-  public Object visitLiteralExpr(Literal expr) {
+  public Object visitLiteralExpr(Expr.Literal expr) {
     return expr.value;
   }
 
   @Override
-  public Object visitUnaryExpr(Unary expr) {
+  public Object visitUnaryExpr(Expr.Unary expr) {
     Object operand = evaluate(expr.expr);
 
     switch (expr.operator.type) {
-      case MINUS:
-        checkNumberOperand(expr.operator, operand);
-        return -(int)operand;
+      case PRIME:
+        return operand;
       case ENABLED:
         checkBooleanOperand(expr.operator, operand);
         return (boolean)operand;
       case NOT:
         checkBooleanOperand(expr.operator, operand);
         return !(boolean)operand;
-      case PRIME:
-        return operand;
+      case MINUS:
+        checkNumberOperand(expr.operator, operand);
+        return -(int)operand;
       default:
         // Unreachable.
         return null;
@@ -108,7 +101,7 @@ class Interpreter implements Expr.Visitor<Object> {
   }
 
   @Override
-  public Object visitTernaryExpr(Ternary expr) {
+  public Object visitTernaryExpr(Expr.Ternary expr) {
     switch (expr.operator.type) {
       case IF:
         Object conditional = evaluate(expr.first);
@@ -122,7 +115,7 @@ class Interpreter implements Expr.Visitor<Object> {
   }
 
   @Override
-  public Object visitVariadicExpr(Variadic expr) {
+  public Object visitVariadicExpr(Expr.Variadic expr) {
     switch (expr.operator.type) {
       case LEFT_BRACE:
         Set<Object> set = new HashSet<Object>();
