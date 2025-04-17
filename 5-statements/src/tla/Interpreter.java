@@ -1,21 +1,47 @@
 package tla;
 
 import java.util.Set;
+
+import java.util.List;
 import java.util.HashSet;
 
-class Interpreter implements Expr.Visitor<Object> {
-
-  void interpret(Expr expression) {
+class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
+  private Environment environment;
+  
+  public Interpreter(boolean replMode) {
+    this.environment = new Environment(replMode);
+  }
+  
+  void interpret(List<Stmt> statements) {
     try {
-      Object value = evaluate(expression);
-      System.out.println(stringify(value));
+      for (Stmt statement : statements) {
+        execute(statement);
+      }
     } catch (RuntimeError error) {
       TlaPlus.runtimeError(error);
     }
   }
+  
+  private void execute(Stmt stmt) {
+    stmt.accept(this);
+  }
 
   private Object evaluate(Expr expr) {
     return expr.accept(this);
+  }
+
+  @Override
+  public Void visitOpDefStmt(Stmt.OpDef stmt) {
+    Object value = evaluate(stmt.body);
+    environment.define(stmt.name, value);
+    return null;
+  }
+
+  @Override
+  public Void visitPrintStmt(Stmt.Print stmt) {
+    Object value = evaluate(stmt.expression);
+    System.out.println(stringify(value));
+    return null;
   }
 
   @Override
@@ -76,6 +102,11 @@ class Interpreter implements Expr.Visitor<Object> {
   @Override
   public Object visitLiteralExpr(Expr.Literal expr) {
     return expr.value;
+  }
+
+  @Override
+  public Object visitVariableExpr(Expr.Variable expr) {
+    return environment.get(expr.name);
   }
 
   @Override

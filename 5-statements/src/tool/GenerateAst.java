@@ -16,9 +16,16 @@ public class GenerateAst {
       "Binary   : Expr left, Token operator, Expr right",
       "Grouping : Expr expression",
       "Literal  : Object value",
+      "Variable : Token name",
       "Unary    : Token operator, Expr expr",
       "Ternary  : Token operator, Expr first, Expr second, Expr third",
       "Variadic : Token operator, List<Expr> parameters"
+    ));
+
+    defineAst(outputDir, "Stmt", Arrays.asList(
+      "OpDef    : Token name, Expr body",
+      "Print    : Expr expression"
+      //"VarDecl  : List<String> names"
     ));
   }
 

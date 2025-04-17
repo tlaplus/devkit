@@ -9,7 +9,7 @@ import java.nio.file.Paths;
 import java.util.List;
 
 public class TlaPlus {
-  private static final Interpreter interpreter = new Interpreter();
+  private static final Interpreter interpreter = new Interpreter(true);
   static boolean hadError = false;
   static boolean hadRuntimeError = false;
 
@@ -54,14 +54,14 @@ public class TlaPlus {
       System.out.println(token);
     }
 
-    Parser parser = new Parser(tokens);
-    Expr expression = parser.parse();
+    Parser parser = new Parser(tokens, true);
+    List<Stmt> statements = parser.parse();
 
     // Stop if there was a syntax error.
     if (hadError) return;
 
-    System.out.println(new AstPrinter().print(expression));
-    interpreter.interpret(expression);
+    System.out.println(new AstPrinter().print(statements));
+    interpreter.interpret(statements);
   }
 
   static void error(int line, String message) {

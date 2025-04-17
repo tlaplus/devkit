@@ -11,17 +11,45 @@ class Parser {
 
   private final List<Token> tokens;
   private int current = 0;
+  private final boolean replMode;
 
-  Parser(List<Token> tokens) {
+  Parser(List<Token> tokens, boolean replMode) {
     this.tokens = tokens;
+    this.replMode = replMode;
   }
 
-  Expr parse() {
-    try {
-      return expression();
-    } catch (ParseError error) {
-      return null;
+  List<Stmt> parse() {
+    List<Stmt> statements = new ArrayList<>();
+    while (!isAtEnd()) {
+      statements.add(statement());
     }
+
+    return statements;
+  }
+  
+  private Stmt statement() {
+    Expr expr = expression();
+
+    if (match(EQUAL_EQUAL)) {
+      Token equals = previous();
+      Expr value = expression();
+      
+      if (expr instanceof Expr.Variable) {
+        Token name = ((Expr.Variable)expr).name;
+        return new Stmt.OpDef(name, value);
+      }
+
+      throw error(equals, "Invalid assignment target.");
+    } else {
+      if (replMode) return new Stmt.Print(expr);
+      throw error(peek(), "Expected statement.");
+    }
+  }
+
+  private Stmt operatorDefinition() {
+    Token name = previous();
+    consume(EQUAL_EQUAL, "Require == in operator definition");
+    return new Stmt.OpDef(name, expression());
   }
 
   private Expr expression() {
@@ -61,6 +89,10 @@ class Parser {
 
     if (match(NUMBER)) {
       return new Expr.Literal(previous().literal);
+    }
+    
+    if (match(IDENTIFIER)) {
+      return new Expr.Variable(previous());
     }
 
     if (match(LEFT_PAREN)) {

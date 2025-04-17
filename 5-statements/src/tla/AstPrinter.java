@@ -1,8 +1,14 @@
 package tla;
 
-class AstPrinter implements Expr.Visitor<String> {
-  String print(Expr expr) {
-    return expr.accept(this);
+import java.util.List;
+
+class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
+  String print(List<Stmt> statements) {
+    for (Stmt statement : statements) {
+      return statement.accept(this);
+    }
+
+    return null;
   }
 
   @Override
@@ -23,6 +29,11 @@ class AstPrinter implements Expr.Visitor<String> {
   }
 
   @Override
+  public String visitVariableExpr(Expr.Variable expr) {
+    return expr.name.lexeme;
+  }
+
+  @Override
   public String visitUnaryExpr(Expr.Unary expr) {
     return parenthesize(expr.operator.lexeme, expr.expr);
   }
@@ -39,6 +50,16 @@ class AstPrinter implements Expr.Visitor<String> {
                         expr.parameters.toArray(Expr[]::new));
   }
 
+  @Override
+  public String visitOpDefStmt(Stmt.OpDef stmt) {
+    return parenthesize(stmt.name.lexeme, stmt.body);
+  }
+
+  @Override
+  public String visitPrintStmt(Stmt.Print stmt) {
+    return parenthesize("print", stmt.expression);
+  }
+
   private String parenthesize(String name, Expr... exprs) {
     StringBuilder builder = new StringBuilder();
 
@@ -52,4 +73,3 @@ class AstPrinter implements Expr.Visitor<String> {
     return builder.toString();
   }
 }
-
