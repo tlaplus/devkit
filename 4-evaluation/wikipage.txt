@@ -1,0 +1,500 @@
+======= Evaluating Constant TLA⁺ Expressions =======
+
+Now that we can parse expressions, let's evaluate them!
+Here we follow the material in [[https://craftinginterpreters.com/evaluating-expressions.html|Chapter 7]] of //Crafting Interpreters//.
+It's an exciting chapter, so let's jump in.
+
+====== Section 7.1: Representing Values ======
+
+In [[https://craftinginterpreters.com/evaluating-expressions.html#representing-values|section 7.1]] we define a mapping from language values to internal Java values.
+Our mapping for TLA⁺ is fairly similar to Lox, although we use ''Integer'' instead of ''Double'' for number values and also have a set type.
+TLA⁺ thankfully lacks ''nil'' types.
+
+^ TLA⁺ type      ^ Java representation       ^
+| Any TLA⁺ value | ''Object''                |
+| Boolean        | ''Boolean''               |
+| number         | ''Integer''               |
+| set            | ''java.util.Set<Object>'' |
+
+Java does a huge amount of work for us with the capabilities of the ''Object'' type, as we'll see.
+
+====== Section 7.2: Representing Values ======
+
+[[https://craftinginterpreters.com/evaluating-expressions.html#evaluating-expressions|Section 7.2]] is where we start laying down interpreter code.
+Create a new file ''Interpreter.java'' with the highlighted lines changed or added compared with the book:
+
+<code java [highlight_lines_extra="1,3,4"]>
+package tla;
+
+import java.util.Set;
+import java.util.HashSet;
+
+class Interpreter implements Expr.Visitor<Object> {
+}
+</code>
+
+If your IDE supports it, get it to automatically add all necessary stub methods to implement the ''Expr.Visitor<Object>'' interface; we'll be filling these in, defining the interpretation of every expression type!
+
+Let's start with defining the value of literals.
+Our code is completely unchanged from the book; add this ''visitLiteralExpr()'' method in the ''Interpreter'' class:
+
+<code java>
+  @Override
+  public Object visitLiteralExpr(Expr.Literal expr) {
+    return expr.value;
+  }
+</code>
+
+Our code for evaluating grouping (parentheses) is similarly unchanged from the book:
+
+<code java>
+  @Override
+  public Object visitGroupingExpr(Expr.Grouping expr) {
+    return evaluate(expr.expression);
+  }
+</code>
+
+This uses the ''evaluate()'' helper method; add it to the ''Interpreter'' class:
+
+<code java>
+  private Object evaluate(Expr expr) {
+    return expr.accept(this);
+  }
+</code>
+
+==== Evaluating Unary Operators ====
+
+Our first real difference is in the ''visitUnaryExpr()'' method.
+Recall that since our ''Expr.Unary'' type represents both prefix and suffix operators, we don't call its parameter ''right'' as in the book.
+Here's how we define the negative prefix operator, casting the parameter to an ''int'' instead of a ''double'' (highlighted lines differ from book):
+
+<code java [highlight_lines_extra="3,7"]>
+  @Override
+  public Object visitUnaryExpr(Expr.Unary expr) {
+    Object operand = evaluate(expr.expr);
+
+    switch (expr.operator.type) {
+      case MINUS:
+        return -(int)operand;
+    }
+
+    // Unreachable.
+    return null;
+  }
+</code>
+
+Note that the negative prefix operator is not actually a built-in operator of TLA⁺.
+It is defined in the ''Integers'' standard module, and TLA⁺ users need to import that module to access it.
+However, because our minimal TLA⁺ language subset lacks module importing, for convenience we just define some common arithmetic operators as built-in.
+You can find more information about the built-in TLA⁺ operators in chapter 16 of //[[https://lamport.azurewebsites.net/tla/book.html|Specifying Systems]]// by Leslie Lamport, or [[https://github.com/tlaplus/tlaplus/blob/13e5a39b5368a6da4906b8ed1c2c1114d2e7de15/tlatools/org.lamport.tlatools/src/tla2sany/semantic/BuiltInOperators.java#L80-L153|this SANY source file]].
+
+Our logical-not prefix operator is denoted by the ''NOT'' token type instead of ''BANG'' as in Lox.
+We also have no use for the ''isTruthy()'' helper method, since TLA⁺ is quite strict: only Boolean values can be given to Boolean operators!
+Add this code to the ''visitUnaryExpr()'' method:
+
+<code java [highlight_lines_extra="2,3"]>
+    switch (expr.operator.type) {
+      case NOT:
+        return !(boolean)operand;
+      case MINUS:
+</code>
+
+We still have two more unary operators to define: ''ENABLED'', and the prime operator.
+Both are trivial in this domain but will become much more complicated later on.
+For constant expressions, ''ENABLED'' is true if and only if the expression itself is true.
+Add the highlighted code to the ''visitUnaryExpr()'' method:
+
+<code java [highlight_lines_extra="2,3"]>
+    switch (expr.operator.type) {
+      case ENABLED:
+        return (boolean)operand;
+      case NOT:
+</code>
+
+Priming a constant expression has no effect on the value of that expression, so just return the operand's value:
+
+<code java [highlight_lines_extra="2,3"]>
+    switch (expr.operator.type) {
+      case PRIME:
+        return operand;
+      case ENABLED:
+</code>
+
+==== Evaluating Binary Operators ====
+
+Unlike Lox, addition in TLA⁺ is only defined between two numbers (at least in its standard ''Integers'' module definition).
+Here's how we define our basic binary arithmetic & comparison operators; add a ''visitBinaryExpr()'' method in the ''Interpreter'' class:
+
+<code java [highlight_lines_extra="8,9,10,11,12,13,14"]>
+  @Override
+  public Object visitBinaryExpr(Expr.Binary expr) {
+    Object left = evaluate(expr.left);
+    Object right = evaluate(expr.right);
+
+    switch (expr.operator.type) {
+      case MINUS:
+        return (int)left - (int)right;
+      case PLUS:
+        return (int)left + (int)right;
+      case LESS_THAN:
+        return (int)left < (int)right;
+      case EQUAL:
+        return left.equals(right);
+    }
+
+    // Unreachable.
+    return null;
+  }
+</code>
+
+Note that since we don't have to worry about ''null'' values, we don't need the ''isEqual()'' helper method from the book and can use Java's ''Object.equals()'' method directly.
+However, this actually gives us different equality semantics from TLC.
+In TLC, evaluating things like ''123 = TRUE'' results in a runtime error instead of evaluating to ''false'' as will be the case here.
+In the interest of simplicity we are fine with keeping these looser semantics.
+See the challenges at the end of this tutorial page if you're interested in more closely matching the semantics of TLC.
+
+Let's take our first foray into sets by defining the set membership operator in ''visitBinaryExpr()'':
+
+<code java [highlight_lines_extra="2,3"]>
+    switch (expr.operator.type) {
+      case IN:
+        return ((Set<?>)right).contains(left);
+      case MINUS:
+</code>
+
+The question mark is some unusual Java syntax you probably haven't seen before, called a [[https://docs.oracle.com/javase/tutorial/java/generics/wildcards.html|wildcard]].
+It has to do with //covariance//, which you can read about at the end of the chapter in the book.
+Think of it as casting the right operand to //some kind// of set, so we can access the ''Set.contains()'' method.
+It is tempting to cast it to ''Set<Object>'' (as we only ever create ''Set<Object>'' instances) but this produces a compiler warning.
+
+Similar to equality, we get looser semantics here than with TLC.
+TLC will emit a runtime error when evaluating the expression ''TRUE \in {1, 2, 3}'', while our interpreter will simple evaluate it to ''false''.
+Again this is acceptable.
+
+Now for something more complicated.
+Here's the set construction helper operator ''..'', also defined in ''visitBinaryExpr()''; this constructs a set containing all numbers between the left and right parameters, inclusive:
+
+<code java [highlight_lines_extra="2,3,4,5,6,7,8,9,10,11"]>
+    switch (expr.operator.type) {
+      case DOT_DOT:
+        Set<Object> set = new HashSet<Object>();
+        int lower = (int)left;
+        int higher = (int)right;
+        if (lower <= higher) {
+          for (int i = lower; i <= higher; i++) {
+            set.add(i);
+          }
+        }
+        return set;
+      case IN:
+</code>
+
+So expressions like ''1 .. 3'' produce the set ''{1, 2, 3}'' while ''3 .. 2'' produces the empty set ''{}''.
+We use ''Set<Object>'', so our sets can hold any value you can imagine including nested sets.
+It's incredible how much we get for free here; Java sets even implement value-based de-duplication and equality comparison for us for arbitrarily-nested sets!
+
+The only binary operators remaining are logical ''AND'' & ''OR'', and they differ in a subtle but important way.
+We actually want ''AND'' to implement //short-circuit evaluation//, so an expression like ''FALSE /\ TRUE'' evaluates to ''false'' without even looking at the right hand operand.
+Add the highlighted lines near the top of the ''visitBinaryExpr()'' method:
+
+<code java [highlight_lines_extra="3,4,5,6,7,8,9,10"]>
+  public Object visitBinaryExpr(Expr.Binary expr) {
+    Object left = evaluate(expr.left);
+    switch (expr.operator.type) {
+      case AND:
+        if (!(boolean)left) return false;
+        Object right = evaluate(expr.right);
+        return (boolean)right;
+      default:
+        break;
+    }
+
+</code>
+
+In an odd contrast, our ''OR'' binary operator is //not// short-circuited.
+We add it in with the rest of the operators in ''visitBinaryExpr()'':
+
+<code java [highlight_lines_extra="3,4"]>
+    Object right = evaluate(expr.right);
+    switch (expr.operator.type) {
+      case OR:
+        return (boolean)left || (boolean)right;
+      case DOT_DOT:
+</code>
+
+Why are these different?
+It has to do with how they are used in TLA⁺ formulas.
+Actions are usually defined as a conjunction of expressions serving as guards, where later expressions could result in a runtime error if evaluated in some cases.
+For example, consider a variable ''x'' that can either be a sentinel value ''None'' or a set.
+People often write expressions like ''x /= None /\ 1 \in x''.
+It would be a runtime error to evaluate ''1 \in x'' if ''x = None''.
+It is thus useful to use conjunction as a guard stopping expression interpretation if the first operand is not true.
+In contrast, disjunction is used in TLA⁺ to express nondeterminism and so both branches of the disjunct need to be evaluated to see whether their expressions satisfy alternative next states.
+You can read [[https://groups.google.com/g/tlaplus/c/U6tOJ4dsjVM/m/1zXWHrZbBwAJ|this]] thread on the TLA⁺ mailing list for more information.
+
+==== Evaluating Other Operators ====
+
+Our ''IF''/''THEN''/''ELSE'' and set constructor operators are all that remain.
+Add this ''visitTernaryExpr()'' method to the ''Interpreter'' class:
+
+<code java>
+  @Override
+  public Object visitTernaryExpr(Ternary expr) {
+    switch (expr.operator.type) {
+      case IF:
+        Object conditional = evaluate(expr.first);
+        return (boolean)conditional ?
+            evaluate(expr.second) : evaluate(expr.third);
+      default:
+        // Unreachable.
+        return null;
+    }
+  }
+</code>
+
+''IF''/''THEN''/''ELSE'' has a straightforward translation to Java's ''?''/'':'' mixfix operator.
+Note our definition is also short-circuiting.
+
+Finally, here's how we define the set construction operator; add this ''visitVariadicExpr()'' method in the ''Interpreter'' class:
+
+<code java>
+  @Override
+  public Object visitVariadicExpr(Expr.Variadic expr) {
+    switch (expr.operator.type) {
+      case LEFT_BRACE:
+        Set<Object> set = new HashSet<Object>();
+        for (Expr parameter : expr.parameters) {
+          set.add(evaluate(parameter));
+        }
+        return set;
+      default:
+        // Unreachable.
+        return null;
+    }
+  }
+</code>
+
+====== Section 7.3: Runtime Errors ======
+
+In [[https://craftinginterpreters.com/evaluating-expressions.html#runtime-errors|section 7.3]] we add some error detection & reporting to our interpreter code.
+
+Here's our variant of the ''checkNumberOperand()'' and ''checkNumberOperands()'' methods given in the book, using ''Integer'' instead of ''Double''; put these in the ''Interpreter'' class:
+
+<code java [highlight_lines_extra="2,8"]>
+  private void checkNumberOperand(Token operator, Object operand) {
+    if (operand instanceof Integer) return;
+    throw new RuntimeError(operator, "Operand must be a number.");
+  }
+
+  private void checkNumberOperands(Token operator,
+                                   Object left, Object right) {
+    if (left instanceof Integer && right instanceof Integer) return;
+
+    throw new RuntimeError(operator, "Operands must be numbers.");
+  }
+</code>
+
+Create a new ''RuntimeError.java'' file.
+Contents are identical to that give in the book except for the package name:
+
+<code java [highlight_lines_extra="1"]>
+package tla;
+
+class RuntimeError extends RuntimeException {
+  final Token token;
+
+  RuntimeError(Token token, String message) {
+    super(message);
+    this.token = token;
+  }
+}
+</code>
+
+We also need some helpers for boolean operator parameters since TLA⁺ is more strict about that; add these to the ''Interpreter'' class:
+
+<code java>
+  private void checkBooleanOperand(Token operator, Object operand) {
+    if (operand instanceof Boolean) return;
+    throw new RuntimeError(operator, "Operand must be a boolean.");
+  }
+
+  private void checkBooleanOperands(Token operator, Object left, Object right) {
+    if (left instanceof Boolean && right instanceof Boolean) return;
+    throw new RuntimeError(operator, "Operands must be booleans.");
+  }
+</code>
+
+Finally, we need a helper for checking whether an operand is a set:
+
+<code java>
+  private void checkSetOperand(Token operator, Object operand) {
+    if (operand instanceof Set<?>) return;
+    throw new RuntimeError(operator, "Operand must be a set.");
+  }
+</code>
+
+Now add these checks to our interpreter code.
+Here's negative:
+<code java [highlight_lines_extra="2"]>
+      case MINUS:
+        checkNumberOperand(expr.operator, operand);
+        return -(int)operand;
+</code>
+Logical not:
+<code java [highlight_lines_extra="2"]>
+      case NOT:
+        checkBooleanOperand(expr.operator, operand);
+        return !(boolean)operand;
+</code>
+Enabled:
+<code java [highlight_lines_extra="2"]>
+      case ENABLED:
+        checkBooleanOperand(expr.operator, operand);
+        return (boolean)operand;
+</code>
+Subtraction:
+<code java [highlight_lines_extra="2"]>
+      case MINUS:
+        checkNumberOperands(expr.operator, left, right);
+        return (int)left - (int)right;
+</code>
+Addition:
+<code java [highlight_lines_extra="2"]>
+      case PLUS:
+        checkNumberOperands(expr.operator, left, right);
+        return (int)left + (int)right;
+</code>
+Less than:
+<code java [highlight_lines_extra="2"]>
+      case LESS_THAN:
+        checkNumberOperands(expr.operator, left, right);
+        return (int)left < (int)right;
+</code>
+The ''..'' range set constructor:
+<code java [highlight_lines_extra="2"]>
+      case DOT_DOT:
+        checkNumberOperands(expr.operator, left, right);
+        Set<Object> set = new HashSet<Object>();
+</code>
+Set membership:
+<code java [highlight_lines_extra="2"]>
+      case IN:
+        checkSetOperand(expr.operator, right);
+        return ((Set<?>)right).contains(left);
+</code>
+Disjunction:
+<code java [highlight_lines_extra="2"]>
+      case OR:
+        checkBooleanOperands(expr.operator, left, right);
+        return (boolean)left || (boolean)right;
+</code>
+Conjunction:
+<code java [highlight_lines_extra="2,5"]>
+      case AND:
+        checkBooleanOperand(expr.operator, left);
+        if (!(boolean)left) return false;
+        Object right = evaluate(expr.right);
+        checkBooleanOperand(expr.operator, right);
+        return (boolean)right;
+</code>
+Finally, ''IF''/''THEN''/''ELSE'':
+<code java [highlight_lines_extra="3"]>
+      case IF:
+        Object conditional = evaluate(expr.first);
+        checkBooleanOperand(expr.operator, conditional);
+        return (boolean)conditional ?
+            evaluate(expr.second) : evaluate(expr.third);
+</code>
+
+====== Section 7.4: Hooking Up the Interpreter ======
+
+We're very close!
+In [[https://craftinginterpreters.com/evaluating-expressions.html#hooking-up-the-interpreter|section 7.4]] we put in the finishing touches to get to a real running TLA⁺ REPL!
+First, add this public ''interpret()'' method to the ''Interpreter'' class; highlighted line shows a difference from the book:
+<code java [highlight_lines_extra="6"]>
+  void interpret(Expr expression) { 
+    try {
+      Object value = evaluate(expression);
+      System.out.println(stringify(value));
+    } catch (RuntimeError error) {
+      TlaPlus.runtimeError(error);
+    }
+  }
+</code>
+
+In contrast to the book, our ''stringify()'' method is very simple; add this to the ''Interpreter'' class:
+
+<code java>
+  private String stringify(Object object) {
+    return object.toString();
+  }
+</code>
+
+Add a ''runtimeError()'' method to your main ''TlaPlus'' class after ''error()'':
+
+<code java>
+  static void runtimeError(RuntimeError error) {
+    System.err.println(error.getMessage() +
+        "\n[line " + error.token.line + "]");
+    hadRuntimeError = true;
+  }
+</code>
+
+Then add a static ''hadRuntimeError'' field to the ''TlaPlus'' class:
+
+<code java [highlight_lines_extra="2"]>
+  static boolean hadError = false;
+  static boolean hadRuntimeError = false;
+
+  public static void main(String[] args) throws IOException {
+</code>
+
+And exit from the ''runFile()'' method with a particular error code if a runtime error occurs:
+
+<code java [highlight_lines_extra="5"]>
+    run(new String(bytes, StandardCharsets.UTF_8));
+
+    // Indicate an error in the exit code.
+    if (hadError) System.exit(65);
+    if (hadRuntimeError) System.exit(70);
+  }
+</code>
+
+Finally, create a static ''Interpreter'' instance at the top of the ''TlaPlus'' class:
+
+<code java [highlight_lines_extra="2"]>
+public class TlaPlus {
+  private static final Interpreter interpreter = new Interpreter();
+  static boolean hadError = false;
+</code>
+
+Then finish it off by actually interpreting the expression given by the user; add this in the ''run()'' method in the ''TlaPlus'' class:
+
+<code java [highlight_lines_extra="4"]>
+    // Stop if there was a syntax error.
+    if (hadError) return;
+
+    interpreter.interpret(expression);
+  }
+</code>
+
+Voila!
+Your program will now interpret any constant TLA⁺ expression you provide it!
+Try it out:
+<code>
+> {0 .. 2, IF TRUE THEN 1 ELSE 2, {}}
+[[], 1, [0, 1, 2]]
+</code>
+
+If you got out of sync, you can find a snapshot of the expected state of the code in [[https://github.com/tlaplus-community/tlaplus-creator/tree/main/4-evaluation|this repo directory]].
+Next tutorial: [[https://docs.tlapl.us/creating:statements|Handle TLA⁺ Statements]]!
+
+====== Challenges ======
+
+Here are some optional challenges to flesh out your TLA⁺ interpreter, roughly ranked from simplest to most difficult.
+You should save a copy of your code before attempting these.
+  - TLC evaluates cross-type equality comparison as a runtime error. For example, ''123 = TRUE'' evaluates to ''false'' in our interpreter but will throw an exception in TLC. Modify your interpreter to match the behavior of TLC.
+  - TLC requires set elements to all be of the same type. Trying to construct the set ''{1, 2, TRUE}'' results in a TLC runtime error. Similarly, TLC only allows nested sets if //all// elements are similarly nested and of the same type: ''{1, {2}}'' is not allowed. Modify your interpreter to match the behavior of TLC. Use the TLC REPL to check which set constructions are allowed or disallowed. Checking whether an element of the wrong type is part of a set using the ''\in'' operator also should result in a runtime error.
+
+[[https://docs.tlapl.us/creating:expressions|< Previous Page]] | [[https://docs.tlapl.us/creating:statements|Next Page >]]
+

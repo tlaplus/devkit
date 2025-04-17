@@ -22,7 +22,9 @@ And, if you reach the edge of those capabilities - well, you're well-placed to e
 
   - [[https://docs.tlapl.us/creating:start|Introduction (this page)]]
   - [[https://docs.tlapl.us/creating:scanning|Scanning TLA⁺ Tokens]]
-  - [[https://docs.tlapl.us/creating:expressions|Handling Constant TLA⁺ Expressions]]
+  - [[https://docs.tlapl.us/creating:expressions|Parsing Constant TLA⁺ Expressions]]
+  - [[https://docs.tlapl.us/creating:evaluation|Evaluating Constant TLA⁺ Expressions]]
+  - [[https://docs.tlapl.us/creating:statements|Handling TLA⁺ Statements]]
   - TODO
 
 ===== Overview =====
