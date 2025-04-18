@@ -1,0 +1,20 @@
+======= Handling TLA⁺ Statements =======
+
+Here we cover [[https://craftinginterpreters.com/statements-and-state.html|Chapter 8: Statements and State]] of //Crafting Interpreters//.
+We'll implement the ability to associate identifiers with values, then subsequently use those identifiers in expressions.
+While Lox was designed with a dual REPL/file execution model in mind, TLA⁺ was not - so the behavior of our interpreter will vary quite a bit from the book!
+We will have to implement parser & interpreter //modes//.
+When the user runs our TLA⁺ interpreter as a REPL, we want to support operator redefinition and the ability to see the value of simple expressions - like the Python REPL.
+In contast, when the user runs our TLA⁺ interpreter against a file it should be an error for multiple operators to use the same name.
+The parser also should not accept standalone expressions in the middle of the file.
+
+====== Section 8.1: Statements ======
+
+In [[section 8.1]](https://craftinginterpreters.com/statements-and-state.html#statements) we add a new parse tree node class hierarchy: ''Stmt''.
+The book initially defines two statement types: ''Expression'', and ''Print''.
+''Expression'' statements are standalone expressions, which are evaluated then have their result discarded.
+''Print'' statements are identified with a keyword and print out the expression result instead of discarding it.
+We will be combining these into a single odd construct!
+We want to support the user typing standalone expressions like ''x + y'' in the REPL then seeing their result.
+TLA⁺ does not have a print keyword, and standalone expressions are not allowed in the language generally, so the best thing to do is allow standalone expressions //only// when running in a REPL, and parse these standalone expressions as print statements.
+
