@@ -4,19 +4,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import org.junit.jupiter.api.Test;
 
-public class TestParser {
+public class TestExpressionParsing {
 
   private static void checkEqual(String input, String expected) {
     Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens());
+    Parser p = new Parser(s.scanTokens(), true);
     String actual = new AstPrinter().print(p.parse());
-    assertEquals(expected, actual);
+    assertEquals("(print " + expected + ")", actual);
   }
 
   private static void checkError(String input) {
     Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens());
-    assertNull(p.parse());
+    Parser p = new Parser(s.scanTokens(), true);
+    assertNull(p.parse().get(0));
   }
 
   @Test

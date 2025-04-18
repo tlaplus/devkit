@@ -1,14 +1,14 @@
 package tla;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
   String print(List<Stmt> statements) {
-    for (Stmt statement : statements) {
-      return statement.accept(this);
-    }
-
-    return null;
+    return statements
+        .stream()
+        .map(statement -> statement.accept(this))
+        .collect(Collectors.joining(" "));
   }
 
   @Override

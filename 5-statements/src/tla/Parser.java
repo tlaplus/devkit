@@ -21,34 +21,31 @@ class Parser {
   List<Stmt> parse() {
     List<Stmt> statements = new ArrayList<>();
     while (!isAtEnd()) {
-      statements.add(statement());
+      statements.add(declaration());
     }
 
     return statements;
   }
-  
-  private Stmt statement() {
-    Expr expr = expression();
 
-    if (match(EQUAL_EQUAL)) {
-      Token equals = previous();
-      Expr value = expression();
-      
-      if (expr instanceof Expr.Variable) {
-        Token name = ((Expr.Variable)expr).name;
-        return new Stmt.OpDef(name, value);
-      }
-
-      throw error(equals, "Invalid assignment target.");
-    } else {
-      if (replMode) return new Stmt.Print(expr);
+  private Stmt declaration() {
+    try {
+      if (lookahead().isAtOpDefStart()) return operatorDefinition();
+      if (replMode) return new Stmt.Print(expression());
       throw error(peek(), "Expected statement.");
+    } catch (ParseError error) {
+      synchronize();
+      return null;
     }
   }
 
+  private boolean isAtOpDefStart() {
+    if (!match(IDENTIFIER)) return false;
+    return match(EQUAL_EQUAL);
+  }
+
   private Stmt operatorDefinition() {
-    Token name = previous();
-    consume(EQUAL_EQUAL, "Require == in operator definition");
+    Token name = consume(IDENTIFIER, "Name required for operator definition.");
+    consume(EQUAL_EQUAL, "== required for operator definition.");
     return new Stmt.OpDef(name, expression());
   }
 
@@ -90,7 +87,7 @@ class Parser {
     if (match(NUMBER)) {
       return new Expr.Literal(previous().literal);
     }
-    
+
     if (match(IDENTIFIER)) {
       return new Expr.Variable(previous());
     }
@@ -140,6 +137,12 @@ class Parser {
     new Operator(INFIX,   MINUS,      true,   11, 11),
     new Operator(POSTFIX, PRIME,      false,  15, 15),
   };
+
+  private Parser lookahead() {
+    Parser lookahead = new Parser(tokens, replMode);
+    lookahead.current = current;
+    return lookahead;
+  }
 
   private Operator matchOp(Fix fix, int prec) {
     for (Operator op : operators) {
@@ -199,7 +202,7 @@ class Parser {
     advance();
 
     while(!isAtEnd()) {
-      if (previous().type == EQUAL_EQUAL) return;
+      if (lookahead().isAtOpDefStart()) return;
 
       advance();
     }

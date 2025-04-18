@@ -3,15 +3,18 @@ package tla;
 import java.util.Set;
 
 import java.util.List;
+import java.io.PrintStream;
 import java.util.HashSet;
 
 class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
   private Environment environment;
-  
-  public Interpreter(boolean replMode) {
+  private PrintStream out;
+
+  public Interpreter(boolean replMode, PrintStream out) {
     this.environment = new Environment(replMode);
+    this.out = out;
   }
-  
+
   void interpret(List<Stmt> statements) {
     try {
       for (Stmt statement : statements) {
@@ -21,7 +24,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
       TlaPlus.runtimeError(error);
     }
   }
-  
+
   private void execute(Stmt stmt) {
     stmt.accept(this);
   }
@@ -40,7 +43,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
   @Override
   public Void visitPrintStmt(Stmt.Print stmt) {
     Object value = evaluate(stmt.expression);
-    System.out.println(stringify(value));
+    out.println(stringify(value));
     return null;
   }
 

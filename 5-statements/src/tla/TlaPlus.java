@@ -9,7 +9,7 @@ import java.nio.file.Paths;
 import java.util.List;
 
 public class TlaPlus {
-  private static final Interpreter interpreter = new Interpreter(true);
+  private static Interpreter interpreter;
   static boolean hadError = false;
   static boolean hadRuntimeError = false;
 
@@ -18,8 +18,10 @@ public class TlaPlus {
       System.out.println("Usage: jlox [script]");
       System.exit(64);
     } else if (args.length == 1) {
+      interpreter = new Interpreter(false, System.out);
       runFile(args[0]);
     } else {
+      interpreter = new Interpreter(true, System.out);
       runPrompt();
     }
   }

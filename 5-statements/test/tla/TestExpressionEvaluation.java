@@ -10,17 +10,11 @@ import org.junit.jupiter.api.Test;
 public class TestExpressionEvaluation {
   private static String interpret(String input) {
     Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens());
-    Interpreter i = new Interpreter();
-    PrintStream old = System.out;
-    try {
-      ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-      System.setOut(new PrintStream(byteStream));
-      i.interpret(p.parse());
-      return byteStream.toString().strip();
-    } finally {
-      System.setOut(old);
-    }
+    Parser p = new Parser(s.scanTokens(), true);
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    Interpreter i = new Interpreter(true, new PrintStream(output));
+    i.interpret(p.parse());
+    return output.toString().strip();
   }
 
   @Test

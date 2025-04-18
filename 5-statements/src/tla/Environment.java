@@ -4,11 +4,18 @@ import java.util.HashMap;
 import java.util.Map;
 
 class Environment {
+  final Environment enclosing;
   private final boolean allowRedefinition;
   private final Map<String, Object> values = new HashMap<>();
-  
-  public Environment(boolean allowRedefinition) {
+
+  Environment(boolean allowRedefinition) {
+    enclosing = null;
     this.allowRedefinition = allowRedefinition;
+  }
+
+  Environment(Environment enclosing) {
+    this.enclosing = enclosing;
+    this.allowRedefinition = enclosing.allowRedefinition;
   }
 
   void define(Token name, Object value) {
