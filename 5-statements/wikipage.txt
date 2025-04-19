@@ -216,7 +216,7 @@ Start off by generating a new class ''Stmt.OpDef'' by adding to the ''main()'' m
     ));
 </code>
 
-Also generate a ''Expr.Variable'' class:
+Also generate a ''Expr.Variable'' class for expressions referring to the operators:
 
 <code java [highlight_lines_extra="5"]>
     defineAst(outputDir, "Expr", Arrays.asList(
@@ -342,7 +342,9 @@ class Environment {
 }
 </code>
 
-We need to make an additional modification here, adding a parameter indicating whether we're in a REPL so should allow variable redefinition; this also requires defining a constructor:
+We need to make an additional modification here, adding a parameter indicating whether we're in a REPL.
+We only want to allow variable redefinition inside a REPL, and disallow it otherwise.
+This requires defining a constructor:
 
 <code java [highlight_lines_extra=""]>
 class Environment {
@@ -396,14 +398,14 @@ class Interpreter implements Expr.Visitor<Object>,
   }
 </code>
 
-Now we finally add a visitor method in the ''Interpreter'' class for the ''Expr.Variable'' class defined above, which retrieves the value of the variable from the environment:
+Now add a visitor method in the ''Interpreter'' class for the ''Expr.Variable'' class, which retrieves the value of the variable from the environment:
 
 <code java>
   @Override
   public Object visitVariableExpr(Expr.Variable expr) {
     return environment.get(expr.name);
   }
-</code java>
+</code>
 
 
 ====== Section 8.4: Assignment ======
@@ -421,7 +423,7 @@ Add a visitor method in the ''Interpreter'' class for the ''Stmt.OpDef'' class:
 </code>
 
 And that's it!
-Your interpreter should now work:
+Your interpreter should now support definitions:
 
 <code>
 > x == 2
@@ -457,5 +459,14 @@ Initialize it to ''null'' in the current constructor, then add a copy constructo
   }
 </code>
 
-In the ''get()'' method of the ''Environment'' class, recursively resolve variables in the enclosing environment(s) first:
+No further changes to ''Environment'' are necessary at this time; we'll define the desired semantics in later chapters.
+
+Next up, our greatest parsing challenge yet: [[https://docs.tlapl.us/creating:jlists|conjunction & disjunction lists]]!
+
+====== Section 8.5: Challenges ======
+
+  - Write some unit tests for your interpreter. Use a ''[[https://docs.oracle.com/javase/8/docs/api/java/io/ByteArrayOutputStream.html|ByteArrayOutputStream]]'' instance as a parameter to the ''PrintStream'' constructor, then pass your ''PrintStream'' instance into the ''Interpreter'' class to capture its output.
+  - The ''isAtOpDefStart()'' and ''operatorDefinition()'' methods have some duplicated logic that will only grow more involved when we add operator parameter support. Can you find a way to factor out this logic into a single method?
+
+[[https://docs.tlapl.us/creating:evaluation|< Previous Page]] | [[https://docs.tlapl.us/creating:jlists|Next Page >]]
 
