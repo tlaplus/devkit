@@ -716,11 +716,11 @@ Fire up the interpreter and parse a TLA⁺ expression!
 ({ (+ 1 2) (IF true 3 4) ({))
 </code>
 If you got out of sync, you can find a snapshot of the expected state of the code in [[https://github.com/tlaplus-community/tlaplus-creator/tree/main/3-expressions|this repo directory]].
-Next tutorial: [[https://docs.tlapl.us/creating:evaluation|Evaluating Constant TLA⁺ Expressions]]!
+Next tutorial: [[creating:evaluation|Evaluating Constant TLA⁺ Expressions]]!
 
 ====== Challenges ======
 
 Here are some optional challenges to flesh out your TLA⁺ interpreter, roughly ranked from simplest to most difficult.
 
-[[https://docs.tlapl.us/creating:scanning|< Previous Page]] | [[https://docs.tlapl.us/creating:evaluation|Next Page >]]
+[[creating:scanning|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:evaluation|Next Page >]]
 

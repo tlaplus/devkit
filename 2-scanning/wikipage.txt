@@ -509,7 +509,7 @@ Isn't it amazing how quickly this is coming together?
 The simplicity of the required code is one of the great wonders of language implementation.
 If you got lost somewhere along the way, you can find a snapshot of the code on this page [[https://github.com/tlaplus-community/tlaplus-creator/tree/main/2-scanning|here]].
 Next we learn how to collect our tokens into a parse tree!
-Continue the tutorial at [[creating:expressions|Handling Constant TLA⁺ Expressions]].
+Continue the tutorial at [[creating:expressions|Parsing Constant TLA⁺ Expressions]].
 
 ====== Challenges ======
 
@@ -522,5 +522,5 @@ You should save a copy of your code before attempting these.
   - Similar to nested block comments, add support for extramodular text & nested modules. TLA⁺ files are properly supposed to ignore all text outside of modules, treating it the same as comments. Lexing TLA⁺ tokens should only start after reading ahead and detecting a ''---- MODULE'' sequence. Then, after detecting termination of the module with ''===='', the scanner should revert to ignoring the text. Supporting nested modules complicates this further, since you'll need to keep track of the module nesting level to know when you can start ignoring text again.
   - Add Unicode support. Instead of using the ''char'' type, Java represents Unicode codepoints as an ''int''. So, you'll be iterating over an array of ''int''s instead of the characters of a string. Character literals can still be directly compared against ''int''s; our ''case'' statement should be nearly unchanged. Look at the Java 8 [[https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/CharSequence.html#codePoints()|string.codePoints() method]]. Add support for Unicode symbol variants like ''≜'', ''∈'', ''∧'', ''∨'', ''∃'', and ''∀''. Our code reads files assuming the UTF-8 encoding so that's already sorted.
 
-[[https://docs.tlapl.us/creating:start|< Previous Page]] | [[https://docs.tlapl.us/creating:expressions|Next Page >]]
+[[creating:start|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:expressions|Next Page >]]
 

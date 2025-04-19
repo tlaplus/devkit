@@ -20,11 +20,12 @@ And, if you reach the edge of those capabilities - well, you're well-placed to e
 
 ===== Table of Contents =====
 
-  - [[https://docs.tlapl.us/creating:start|Introduction (this page)]]
-  - [[https://docs.tlapl.us/creating:scanning|Scanning TLA⁺ Tokens]]
-  - [[https://docs.tlapl.us/creating:expressions|Parsing Constant TLA⁺ Expressions]]
-  - [[https://docs.tlapl.us/creating:evaluation|Evaluating Constant TLA⁺ Expressions]]
-  - [[https://docs.tlapl.us/creating:statements|Handling TLA⁺ Statements]]
+  - [[creating:start|Introduction (this page)]]
+  - [[creating:scanning|Scanning TLA⁺ Tokens]]
+  - [[creating:expressions|Parsing Constant TLA⁺ Expressions]]
+  - [[creating:evaluation|Evaluating Constant TLA⁺ Expressions]]
+  - [[creating:statements|Handling TLA⁺ Statements]]
+  - [[creating:jlists|Conjunction & Disjunction Lists]]
   - TODO
 
 ===== Overview =====
@@ -106,4 +107,6 @@ Sometimes the code given here is so different from that provided by the book tha
 A parenthetical will specify the meaning of highlighted code when ambiguous.
 
 To begin the tutorial, start at page [[creating:scanning|Scanning TLA⁺ Tokens]].
+
+[[creating:start#table_of_contents|Table of Contents]] | [[creating:scanning|Next Page >]]
 

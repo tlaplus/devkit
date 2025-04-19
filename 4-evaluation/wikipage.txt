@@ -487,7 +487,7 @@ Try it out:
 </code>
 
 If you got out of sync, you can find a snapshot of the expected state of the code in [[https://github.com/tlaplus-community/tlaplus-creator/tree/main/4-evaluation|this repo directory]].
-Next tutorial: [[https://docs.tlapl.us/creating:statements|Handle TLA⁺ Statements]]!
+Next tutorial: [[creating:statements|Handle TLA⁺ Statements]]!
 
 ====== Challenges ======
 
@@ -496,5 +496,5 @@ You should save a copy of your code before attempting these.
   - TLC evaluates cross-type equality comparison as a runtime error. For example, ''123 = TRUE'' evaluates to ''false'' in our interpreter but will throw an exception in TLC. Modify your interpreter to match the behavior of TLC.
   - TLC requires set elements to all be of the same type. Trying to construct the set ''{1, 2, TRUE}'' results in a TLC runtime error. Similarly, TLC only allows nested sets if //all// elements are similarly nested and of the same type: ''{1, {2}}'' is not allowed. Modify your interpreter to match the behavior of TLC. Use the TLC REPL to check which set constructions are allowed or disallowed. Checking whether an element of the wrong type is part of a set using the ''\in'' operator also should result in a runtime error.
 
-[[https://docs.tlapl.us/creating:expressions|< Previous Page]] | [[https://docs.tlapl.us/creating:statements|Next Page >]]
+[[creating:expressions|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:statements|Next Page >]]
 
