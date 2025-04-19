@@ -1,20 +1,461 @@
 ======= Handling TLA⁺ Statements =======
 
-Here we cover [[https://craftinginterpreters.com/statements-and-state.html|Chapter 8: Statements and State]] of //Crafting Interpreters//.
+Here we cover [[https://craftinginterpreters.com/statements-and-state.html|Chapter 8: Statements and State]] of book //Crafting Interpreters//.
 We'll implement the ability to associate identifiers with values, then subsequently use those identifiers in expressions.
 While Lox was designed with a dual REPL/file execution model in mind, TLA⁺ was not - so the behavior of our interpreter will vary quite a bit from the book!
-We will have to implement parser & interpreter //modes//.
+We'll have to implement parser & interpreter //modes//.
 When the user runs our TLA⁺ interpreter as a REPL, we want to support operator redefinition and the ability to see the value of simple expressions - like the Python REPL.
 In contast, when the user runs our TLA⁺ interpreter against a file it should be an error for multiple operators to use the same name.
 The parser also should not accept standalone expressions in the middle of the file.
 
 ====== Section 8.1: Statements ======
 
-In [[section 8.1]](https://craftinginterpreters.com/statements-and-state.html#statements) we add a new parse tree node class hierarchy: ''Stmt''.
+In [[https://craftinginterpreters.com/statements-and-state.html#statements|section 8.1]] we add a new parse tree node class hierarchy: ''Stmt''.
 The book initially defines two statement types: ''Expression'', and ''Print''.
 ''Expression'' statements are standalone expressions, which are evaluated then have their result discarded.
 ''Print'' statements are identified with a keyword and print out the expression result instead of discarding it.
 We will be combining these into a single odd construct!
 We want to support the user typing standalone expressions like ''x + y'' in the REPL then seeing their result.
 TLA⁺ does not have a print keyword, and standalone expressions are not allowed in the language generally, so the best thing to do is allow standalone expressions //only// when running in a REPL, and parse these standalone expressions as print statements.
+Add this to ''GenerateAst.java'' then run it to generate our new class:
+<code java [highlight_lines_extra="4,5,6"]>
+      "Variadic : Token operator, List<Expr> parameters"
+    ));
+
+    defineAst(outputDir, "Stmt", Arrays.asList(
+      "Print    : Expr expression"
+    ));
+  }
+</code>
+
+===== Parsing statements =====
+
+We then need to extend our ''Parser'' constructor to accept a parameter telling us whether we're running in a REPL, so we know whether to accept standalone expressions:
+
+<code java [highlight_lines_extra="3,5,7"]>
+  private final List<Token> tokens;
+  private int current = 0;
+  private final boolean replMode;
+
+  Parser(List<Token> tokens, boolean replMode) {
+    this.tokens = tokens;
+    this.replMode = replMode;
+  }
+</code>
+
+Modify ''parse()'' in the ''Parser'' class, same as in the book:
+
+<code java>
+  List<Stmt> parse() {
+    List<Stmt> statements = new ArrayList<>();
+    while (!isAtEnd()) {
+      statements.add(statement());
+    }
+
+    return statements;
+  }
+</code>
+
+Our ''statement()'' method is different from the book; if we're in REPL mode we parse & return a statement wrapped in a ''Stmt.Print'' object, and error otherwise.
+We'll return to this method later to add parsing logic for operator definitions.
+
+<code java>
+  private Stmt statement() {
+    if (replMode) return new Stmt.Print(expression());
+
+    throw error(peek(), "Expected statement.");
+  }
+</code>
+
+===== Executing statements =====
+
+Add ''Stmt'' to the list of interfaces implemented by the ''Interpreter'' class:
+
+<code java [highlight_lines_extra="2"]>
+class Interpreter implements Expr.Visitor<Object>,
+                             Stmt.Visitor<Void> {
+  void interpret(Expr expression) {
+</code>
+
+Now add a visitor method for the ''Stmt.Print'' class, after ''evaluate()'' in the ''Interpreter'' class.
+This is identical to the book except for one thing, which we will change to improve the testability of our interpreter:
+
+<code java [highlight_lines_extra="4"]>
+  @Override
+  public Void visitPrintStmt(Stmt.Print stmt) {
+    Object value = evaluate(stmt.expression);
+    out.println(stringify(value));
+    return null;
+  }
+</code>
+
+Instead of printing directly to ''System.out'', we add a ''[[https://docs.oracle.com/javase/8/docs/api/java/io/PrintStream.html|PrintStream]]'' field to the ''Interpreter'' class called ''out''.
+''System.out'' implements the ''PrintStream'' interface, but so do other things, and if we want to write unit tests for this class it helps to be able to intercept its output.
+Add a constructor for the ''Interpreter'' class along with the field; also add a ''replMode'' parameter, although don't make use of it just yet:
+
+<code java [highlight_lines_extra="3,5,6,7"]>
+class Interpreter implements Expr.Visitor<Object>,
+                             Stmt.Visitor<Void> {
+  private final PrintStream out;
+
+  public Interpreter(PrintStream out, boolean replMode) {
+    this.out = out;
+  }
+</code>
+
+Same as the book, modify the old ''interpret()'' method to accept a list of statements.
+The changed method is identical to the book except for using ''TlaPlus'' instead of ''Lox'':
+
+<code java [highlight_lines_extra="7"]>
+  void interpret(List<Stmt> statements) {
+    try {
+      for (Stmt statement : statements) {
+        execute(statement);
+      }
+    } catch (RuntimeError error) {
+      TlaPlus.runtimeError(error);
+    }
+  }
+</code>
+
+Also add the ''execute()'' helper method to the ''Interpreter'' class:
+
+<code java>
+  private void execute(Stmt stmt) {
+    stmt.accept(this);
+  }
+</code>
+
+At the top of ''Interpreter.java'', import the classes we're now using:
+
+<code java [highlight_lines_extra="5,6"]>
+package tla;
+
+import java.util.Set;
+import java.util.HashSet;
+import java.util.List;
+import java.io.PrintStream;
+</code>
+
+===== Updating the main method =====
+
+Now let's hook everything up in our main ''TlaPlus'' class.
+Parameterize the ''run()'' method with a ''replMode'' argument, propagate it to the ''Parser'' constructor, and fix the return type of ''parser.parse()'':
+
+<code java [highlight_lines_extra="1,5,6"]>
+  private static void run(String source, boolean replMode) {
+    Scanner scanner = new Scanner(source);
+    List<Token> tokens = scanner.scanTokens();
+
+    Parser parser = new Parser(tokens, replMode);
+    List<Stmt> statements = parser.parse();
+
+    // Stop if there was a syntax error.
+</code>
+
+Then replace the call to the interpreter with this:
+
+<code java [highlight_lines_extra="3"]>
+    if (hadError) return;
+
+    interpreter.interpret(statements);
+  }
+</code>
+
+A bit more tidying up is necessary.
+We need to detect when we're in REPL vs. file mode and propagate that information to our various methods and classes.
+Remove the ''final'' annotation on the ''interpreter'' field of the ''TlaPlus'' class and leave it uninitialized by default:
+
+<code java [highlight_lines_extra="2"]>
+public class TlaPlus {
+  private static Interpreter interpreter;
+</code>
+
+Then modify the ''runFile()'' method as follows:
+
+<code java [highlight_lines_extra="2,4"]>
+  private static void runFile(String path) throws IOException {
+    interpreter = new Interpreter(System.out, false);
+    byte[] bytes = Files.readAllBytes(Paths.get(path));
+    run(new String(bytes, StandardCharsets.UTF_8), false);
+</code>
+
+Similarly modify the ''runPrompt'' method:
+
+<code java [highlight_lines_extra="2,10"]>
+  private static void runPrompt() throws IOException {
+    interpreter = new Interpreter(System.out, true);
+    InputStreamReader input = new InputStreamReader(System.in);
+    BufferedReader reader = new BufferedReader(input);
+
+    for (;;) {
+      System.out.print("> ");
+      String line = reader.readLine();
+      if (line == null) break;
+      run(line, true);
+      hadError = false;
+    }
+  }
+</code>
+
+This was a lot of work to make our REPL basically function as it did before - printing out the value of an expression - but now it sets us up to implement operator definitions!
+
+====== Section 8.2: Global Variables ======
+
+In [[https://craftinginterpreters.com/statements-and-state.html#global-variables|section 8.2]] we introduce global variables in the sense of top-level operator definitions.
+Operator definitions in TLA⁺ take the form ''name == expr''.
+They can be parameterized with arguments, but we won't be implementing that until the tutorial covering chapter 10.
+For now we are simply assigning a name to a value.
+
+Start off by generating a new class ''Stmt.OpDef'' by adding to the ''main()'' method of your ''GenerateAst'' class:
+
+<code java [highlight_lines_extra="3"]>
+    defineAst(outputDir, "Stmt", Arrays.asList(
+      "Print    : Expr expression",
+      "OpDef    : Token name, Expr body"
+    ));
+</code>
+
+Also generate a ''Expr.Variable'' class:
+
+<code java [highlight_lines_extra="5"]>
+    defineAst(outputDir, "Expr", Arrays.asList(
+      "Binary   : Expr left, Token operator, Expr right",
+      "Grouping : Expr expression",
+      "Literal  : Object value",
+      "Variable : Token name",
+      "Unary    : Token operator, Expr expr",
+</code>
+
+Then, in your ''Parser'' class, modify the ''parse()'' method to repeatedly call ''declaration()'' instead of ''statement()'':
+
+<code java [highlight_lines_extra="4"]>
+  List<Stmt> parse() {
+    List<Stmt> statements = new ArrayList<>();
+    while (!isAtEnd()) {
+      statements.add(declaration());
+    }
+
+    return statements;
+  }
+</code>
+
+The ''declaration()'' method is defined similarly to the book, with one line difference highlighted.
+
+<code java [highlight_lines_extra="3"]>
+  private Stmt declaration() {
+    try {
+      if (lookahead().isAtOpDefStart()) return operatorDefinition();
+
+      return statement();
+    } catch (ParseError error) {
+      synchronize();
+      return null;
+    }
+  }
+</code>
+
+That single line difference calls three separate functions we still need to define.
+While Lox is a nice unambiguous language with semicolon-delimited statements, TLA⁺ is a wholly different beast!
+In TLA⁺ it is quite difficult to know where each definition ends and another beings.
+We have to resort to the somewhat drastic measure of cloning our parser then looking several tokens ahead in the stream in search of a ''=='', at which point we will know for certain we are about to parse a new definition.
+This type of unbounded lookahead is inelegant and can lead to poor parser performance, but it simply has to be done.
+Here's our ''lookahead()'' method, which returns a cloned parser instance; put it above ''match()'':
+
+<code java>
+  private Parser lookahead() {
+    Parser lookahead = new Parser(tokens, replMode);
+    lookahead.current = current;
+    return lookahead;
+  }
+</code>
+
+And here is our ''isAtOpDefStart()'' method; it is quite simple for now, since we don't yet support parameters.
+Put it below ''declaration()'':
+
+<code java>
+  private boolean isAtOpDefStart() {
+    if (!match(IDENTIFIER)) return false;
+
+    return match(EQUAL_EQUAL);
+  }
+</code>
+
+Finally, here's the ''operatorDefinition()'' method; again put it below ''declaration()'':
+
+<code java>
+  private Stmt operatorDefinition() {
+    Token name = consume(IDENTIFIER, "Name required for operator definition.");
+    consume(EQUAL_EQUAL, "== required for operator definition.");
+    return new Stmt.OpDef(name, expression());
+  }
+</code>
+
+So we clone the parser, used the cloned parser to look ahead to see whether we're at the start of an operator definition, and - if so - throw away the cloned parser then use our original parser to parse the operator definition like normal.
+
+Incidentally, we can now fill out our ''synchronize()'' error recovery method!
+We want ''synchronize()'' to return when it is about to parse another declaration.
+That can be done with our ''lookahead()'' and ''isAtOpDefStart()'' methods:
+
+<code java [highlight_lines_extra="5"]>
+  private void synchronize() {
+    advance();
+
+    while(!isAtEnd()) {
+      if (lookahead().isAtOpDefStart()) return;
+
+      advance();
+    }
+  }
+</code>
+
+This means a syntax error in one operator definition will not spill out and halt parsing for the entire file.
+
+Finally, let's parse our new ''Expr.Variable'' class.
+Add this logic to the ''primary()'' method of the ''Parser'' class:
+
+<code java [highlight_lines_extra="4,5,6"]>
+      return new Expr.Literal(previous().literal);
+    }
+
+    if (match(IDENTIFIER)) {
+      return new Expr.Variable(previous());
+    }
+
+    if (match(LEFT_PAREN)) {
+</code>
+
+
+====== Section 8.3: Environments ======
+
+In [[https://craftinginterpreters.com/statements-and-state.html#environments|section 8.3]] we build the infrastructure for assigning values to variables then retrieving them.
+Create a new file, ''Environment.java'':
+
+<code java [highlight_lines_extra="1"]>
+package tla;
+
+import java.util.HashMap;
+import java.util.Map;
+
+class Environment {
+  private final Map<String, Object> values = new HashMap<>();
+}
+</code>
+
+We need to make an additional modification here, adding a parameter indicating whether we're in a REPL so should allow variable redefinition; this also requires defining a constructor:
+
+<code java [highlight_lines_extra=""]>
+class Environment {
+  private final boolean allowRedefinition;
+  private final Map<String, Object> values = new HashMap<>();
+
+  Environment(boolean allowRedefinition) {
+    this.allowRedefinition = allowRedefinition;
+  }
+}
+</code>
+
+Then, our ''define()'' method looks like this:
+
+<code java [highlight_lines_extra="1,2,3,4"]>
+  void define(Token name, Object value) {
+    if (!allowRedefinition && values.containsKey(name.lexeme)) {
+      throw new RuntimeError(name, "Redefined definition '" + name.lexeme + "'.");
+    }
+
+    values.put(name.lexeme, value);
+  }
+</code>
+
+Note that we changed the method signature to accept a ''Token'' instead of a ''String'' for the name, so that the ''RuntimeError'' can be constructed properly.
+
+Our ''get()'' method is unchanged from the book:
+
+<code java>
+  Object get(Token name) {
+    if (values.containsKey(name.lexeme)) {
+      return values.get(name.lexeme);
+    }
+
+    throw new RuntimeError(name,
+        "Undefined variable '" + name.lexeme + "'.");
+  }
+</code>
+
+Now add an ''Environment'' instance as a field of your ''Interpreter'' class; here's where we make use of the ''replMode'' constructor parameter we added up above:
+
+<code java [highlight_lines_extra="3,7"]>
+class Interpreter implements Expr.Visitor<Object>,
+                             Stmt.Visitor<Void> {
+  private Environment environment;
+  private final PrintStream out;
+
+  public Interpreter(PrintStream out, boolean replMode) {
+    this.environment = new Environment(replMode);
+    this.out = out;
+  }
+</code>
+
+Now we finally add a visitor method in the ''Interpreter'' class for the ''Expr.Variable'' class defined above, which retrieves the value of the variable from the environment:
+
+<code java>
+  @Override
+  public Object visitVariableExpr(Expr.Variable expr) {
+    return environment.get(expr.name);
+  }
+</code java>
+
+
+====== Section 8.4: Assignment ======
+
+In [[https://craftinginterpreters.com/statements-and-state.html#assignment|section 8.4]] we wire up our operator definitions so they store a new value in the environment.
+Add a visitor method in the ''Interpreter'' class for the ''Stmt.OpDef'' class:
+
+<code java>
+  @Override
+  public Void visitOpDefStmt(Stmt.OpDef stmt) {
+    Object value = evaluate(stmt.body);
+    environment.define(stmt.name, value);
+    return null;
+  }
+</code>
+
+And that's it!
+Your interpreter should now work:
+
+<code>
+> x == 2
+> y == 3
+> x + y
+5
+</code>
+
+====== Section 8.5: Scope ======
+
+We aren't quite done with the chapter, although we won't be using scope just yet.
+In [[https://craftinginterpreters.com/statements-and-state.html#scope|section 8.5]] we add support for nested environments.
+Add a field to your ''Environment'' class:
+
+<code java [highlight_lines_extra="2"]>
+class Environment {
+  final Environment enclosing;
+  private final boolean allowRedefinition;
+  private final Map<String, Object> values = new HashMap<>();
+</code>
+
+Initialize it to ''null'' in the current constructor, then add a copy constructor:
+
+<code java [highlight_lines_extra="2,6,7,8,9"]>
+  Environment(boolean allowRedefinition) {
+    enclosing = null;
+    this.allowRedefinition = allowRedefinition;
+  }
+
+  Environment(Environment enclosing) {
+    this.enclosing = enclosing;
+    this.allowRedefinition = enclosing.allowRedefinition;
+  }
+</code>
+
+In the ''get()'' method of the ''Environment'' class, recursively resolve variables in the enclosing environment(s) first:
 

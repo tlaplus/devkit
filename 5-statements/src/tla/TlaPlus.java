@@ -18,17 +18,16 @@ public class TlaPlus {
       System.out.println("Usage: jlox [script]");
       System.exit(64);
     } else if (args.length == 1) {
-      interpreter = new Interpreter(false, System.out);
       runFile(args[0]);
     } else {
-      interpreter = new Interpreter(true, System.out);
       runPrompt();
     }
   }
 
   private static void runFile(String path) throws IOException {
+    interpreter = new Interpreter(System.out, false);
     byte[] bytes = Files.readAllBytes(Paths.get(path));
-    run(new String(bytes, StandardCharsets.UTF_8));
+    run(new String(bytes, StandardCharsets.UTF_8), false);
 
     // Indicate an error in the exit code.
     if (hadError) System.exit(65);
@@ -36,6 +35,7 @@ public class TlaPlus {
   }
 
   private static void runPrompt() throws IOException {
+    interpreter = new Interpreter(System.out, false);
     InputStreamReader input = new InputStreamReader(System.in);
     BufferedReader reader = new BufferedReader(input);
 
@@ -43,12 +43,12 @@ public class TlaPlus {
       System.out.print("> ");
       String line = reader.readLine();
       if (line == null) break;
-      run(line);
+      run(line, true);
       hadError = false;
     }
   }
 
-  private static void run(String source) {
+  private static void run(String source, boolean replMode) {
     Scanner scanner = new Scanner(source);
     List<Token> tokens = scanner.scanTokens();
 
@@ -56,7 +56,7 @@ public class TlaPlus {
       System.out.println(token);
     }
 
-    Parser parser = new Parser(tokens, true);
+    Parser parser = new Parser(tokens, replMode);
     List<Stmt> statements = parser.parse();
 
     // Stop if there was a syntax error.

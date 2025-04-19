@@ -26,12 +26,12 @@ class Parser {
 
     return statements;
   }
-
+  
   private Stmt declaration() {
     try {
       if (lookahead().isAtOpDefStart()) return operatorDefinition();
-      if (replMode) return new Stmt.Print(expression());
-      throw error(peek(), "Expected statement.");
+
+      return statement();
     } catch (ParseError error) {
       synchronize();
       return null;
@@ -40,6 +40,7 @@ class Parser {
 
   private boolean isAtOpDefStart() {
     if (!match(IDENTIFIER)) return false;
+
     return match(EQUAL_EQUAL);
   }
 
@@ -47,6 +48,12 @@ class Parser {
     Token name = consume(IDENTIFIER, "Name required for operator definition.");
     consume(EQUAL_EQUAL, "== required for operator definition.");
     return new Stmt.OpDef(name, expression());
+  }
+
+  private Stmt statement() {
+    if (replMode) return new Stmt.Print(expression());
+
+    throw error(peek(), "Expected statement.");
   }
 
   private Expr expression() {

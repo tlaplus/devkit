@@ -12,7 +12,7 @@ public class TestExpressionEvaluation {
     Scanner s = new Scanner(input);
     Parser p = new Parser(s.scanTokens(), true);
     ByteArrayOutputStream output = new ByteArrayOutputStream();
-    Interpreter i = new Interpreter(true, new PrintStream(output));
+    Interpreter i = new Interpreter(new PrintStream(output), true);
     i.interpret(p.parse());
     return output.toString().strip();
   }

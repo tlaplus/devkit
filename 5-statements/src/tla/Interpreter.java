@@ -1,16 +1,16 @@
 package tla;
 
 import java.util.Set;
-
+import java.util.HashSet;
 import java.util.List;
 import java.io.PrintStream;
-import java.util.HashSet;
 
-class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
+class Interpreter implements Expr.Visitor<Object>,
+                             Stmt.Visitor<Void> {
   private Environment environment;
-  private PrintStream out;
+  private final PrintStream out;
 
-  public Interpreter(boolean replMode, PrintStream out) {
+  public Interpreter(PrintStream out, boolean replMode) {
     this.environment = new Environment(replMode);
     this.out = out;
   }
