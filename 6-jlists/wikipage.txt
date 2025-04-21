@@ -1,0 +1,27 @@
+======= Conjunction & Disjunction Lists =======
+
+[[https://craftinginterpreters.com/control-flow.html|Chapter 9]] of //Crafting Interpreters// covers control flow - ''if'', ''while'', ''for'', and all that.
+TLA⁺ doesn't really have that, because TLA⁺ specifications aren't imperative programs.
+However, TLA⁺ //does// have something similar.
+When specifying a system's actions, we commonly need to do two things: write preconditions or "guards" controlling whether an action can be taken, and specify the set of possible next-state transitions.
+For the former we use conjunction (aka logical "and"), and for the latter we use disjunction (aka logical "or").
+These operators are so ubiquitous in TLA⁺ that a special syntax was developed to ease their use: vertically-aligned conjunction & disjunction lists, henceforth called "jlists" for brevity.
+Here is what they look like:
+
+<code haskell>
+op ==
+  /\ A
+  /\ B
+  /\ \/ C
+     \/ D 
+</code>
+
+Here, ''/\'' is conjunction and ''\/'' is disjunction.
+If a set of conjuncts or disjuncts are vertically aligned (have the same start column) then those juncts are grouped together.
+So, we want to parse the above example as ''(/\ A B (\/ C D))'', using our ''Expr.Variadic'' type.
+This is a very nice language feature, but parsing these lists properly is the greatest challenge we've yet faced.
+It is only a slight exaggeration to say the purpose of this entire tutorial series is to teach you how to parse these jlists.
+Let's begin!
+
+[[creating:statements|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:operators|Next Page >]]
+
