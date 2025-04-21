@@ -36,7 +36,7 @@ There are two good reasons for this:
   - The high-quality free online textbook //[[https://craftinginterpreters.com/contents.html|Crafting Interpreters]]// by Robert Nystrom uses Java, and this tutorial is a simple TLA⁺-themed wrapper around its concepts. That book states its own reasons for using Java, which you can read.
 
 You will need to install the [[https://adoptium.net/|Java Development Kit]] appropriate for your system.
-While all code artifacts can be produced entirely by reading this tutorial, if you get out of sync you can find working implementations in [[https://github.com/tlaplus-community/tlaplus-creator|this git repository]].
+While all code artifacts can be produced entirely by reading this tutorial, if you get out of sync you can find working implementations in [[https://github.com/tlaplus/devkit|this git repository]].
 
 The tutorial has you construct the TLA⁺ tools from the bottom up.
 First you'll learn to parse its syntax, then how to check its semantics, then how to interpret its expressions, and finally how to check the safety of a simple specification.

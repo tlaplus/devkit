@@ -507,7 +507,7 @@ EOF  null
 
 Isn't it amazing how quickly this is coming together?
 The simplicity of the required code is one of the great wonders of language implementation.
-If you got lost somewhere along the way, you can find a snapshot of the code on this page [[https://github.com/tlaplus-community/tlaplus-creator/tree/main/2-scanning|here]].
+If you got lost somewhere along the way, you can find a snapshot of the code on this page [[https://github.com/tlaplus/devkit/tree/main/2-scanning|here]].
 Next we learn how to collect our tokens into a parse tree!
 Continue the tutorial at [[creating:expressions|Parsing Constant TLA⁺ Expressions]].
 

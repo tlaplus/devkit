@@ -462,7 +462,7 @@ Initialize it to ''null'' in the current constructor, then add a copy constructo
 No further changes to ''Environment'' are necessary at this time; we'll define the desired semantics in later chapters.
 
 Next up, our greatest parsing challenge yet: [[creating:jlists|conjunction & disjunction lists]]!
-If your code got out of sync during this tutorial, you can find a snapshot of its expected state in [[https://github.com/tlaplus-community/tlaplus-creator/tree/main/5-statements|this repo directory]].
+If your code got out of sync during this tutorial, you can find a snapshot of its expected state in [[https://github.com/tlaplus/devkit/tree/main/5-statements|this repo directory]].
 
 ====== Section 8.5: Challenges ======
 

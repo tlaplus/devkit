@@ -486,7 +486,7 @@ Try it out:
 [[], 1, [0, 1, 2]]
 </code>
 
-If you got out of sync, you can find a snapshot of the expected state of the code in [[https://github.com/tlaplus-community/tlaplus-creator/tree/main/4-evaluation|this repo directory]].
+If you got out of sync, you can find a snapshot of the expected state of the code in [[https://github.com/tlaplus/devkit/tree/main/4-evaluation|this repo directory]].
 Next tutorial: [[creating:statements|Handle TLA⁺ Statements]]!
 
 ====== Challenges ======
