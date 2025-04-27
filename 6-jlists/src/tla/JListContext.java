@@ -3,51 +3,30 @@ package tla;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
-import static tla.TokenType.*;
-
 class JListContext {
 
-  private enum JListType {
-    CONJUNCTION,
-    DISJUNCTION
+  private record JListInfo(TokenType type, int column) { }
+
+  private final Deque<JListInfo> stack = new ArrayDeque<>();
+
+  public void startNew(Token op) {
+    stack.push(new JListInfo(op.type, op.column));
   }
 
-  private record JListInfo(JListType type, int column) { }
-
-  private final Deque<JListInfo> stack = new ArrayDeque<JListInfo>();
-
-  private static boolean isJListBulletToken(TokenType kind) {
-    return AND == kind || OR == kind;
-  }
-
-  private static JListType asJListType(TokenType kind) {
-    switch (kind) {
-      case AND: return JListType.CONJUNCTION;
-      case OR: return JListType.DISJUNCTION;
-      default: return null; // Unreachable
-    }
-  }
-
-  public void startNewJList(Token op) {
-    this.stack.push(new JListInfo(asJListType(op.type), op.column));
-  }
-
-  public void terminateCurrentJList() {
-    this.stack.pop();
+  public void terminateCurrent() {
+    stack.pop();
   }
 
   public boolean isNewBullet(Token op) {
-    JListInfo headOrNull = this.stack.peekFirst();
-    return
-      headOrNull != null
-      && isJListBulletToken(op.type)
-      && headOrNull.column == op.column
-      && headOrNull.type == asJListType(op.type);
+    JListInfo current = this.stack.peekFirst();
+    return current != null
+        && current.type == op.type
+        && current.column == op.column;
   }
 
   public boolean isAboveCurrent(Token tok) {
-    JListInfo headOrNull = this.stack.peekFirst();
-    return headOrNull == null || headOrNull.column < tok.column;
+    JListInfo current = this.stack.peekFirst();
+    return current == null || current.column < tok.column;
   }
 
   public void dump() {

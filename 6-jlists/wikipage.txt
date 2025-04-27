@@ -50,8 +50,7 @@ So, try adding this to the ''primary()'' method of your ''Parser'' class, below 
 </code>
 
 Remember our special ''column'' field we added to the ''Token'' class way back in the scanning chapter?
-Now we put it to use in a new helper function for the ''Parser'' class, ''matchBullet()'':
-
+Now we put it to use in a new helper function for the ''Parser'' class, ''matchBullet()''; think "bullet" as in "bullet points":
 <code java>
   private boolean matchBullet(TokenType op, int column) {
     if (peek().type == op && peek().column == column) {
@@ -134,36 +133,119 @@ When we finish parsing a jlist, we pop it from the stack.
 The top of this stack is the "current" jlist context, and it modifies how some of our helper methods work.
 
 Some of the logic here gets a bit finicky, so let's encapsulate it within a class.
-Create a new file called ''JListContext.java''; import [[https://docs.oracle.com/javase/8/docs/api/java/util/Deque.html|deque]]-related classes so we have a stack:
+Create a new file called ''JListContext.java''; import [[https://docs.oracle.com/javase/8/docs/api/java/util/Deque.html|deque]]-related classes so we have a stack, and use the handy Java 17 [[https://openjdk.org/jeps/395|records]] feature to cut down on boilerplate and define a quick ''JListInfo'' class for our stack to hold:
 <code java>
 package tla;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 
-import static tla.TokenType.*;
-
 class JListContext {
-  private final Deque<JListInfo> stack = new ArrayDeque<JListInfo>();
+
+  private record JListInfo(TokenType type, int column) { }
+
+  private final Deque<JListInfo> stack = new ArrayDeque<>();
 }
 </code>
 
-We're going to use the handy Java 17 [[https://openjdk.org/jeps/395|records]] feature to cut down on boilerplate and define a quick ''JListInfo'' data class, along with a ''JListType'' enum:
-<code java [highlight_lines_extra="2,3,4,5,7"]>
-class JListContext {
-  private enum JListType {
-    CONJUNCTION,
-    DISJUNCTION
+Add an instance of ''JListContext'' as a new class variable in the ''Parser'' class:
+
+<code java [highlight_lines_extra="4"]>
+  private final List<Token> tokens;
+  private int current = 0;
+  private final boolean replMode;
+  private final JListContext jlists = new JListContext();
+</code>
+
+In the ''JListContext'' class, add some helpers to create a new jlist or terminate the current one:
+
+<code java>
+  public void startNew(Token op) {
+    stack.push(new JListInfo(op.type, op.column));
   }
 
-  private record JListInfo(JListType type, int column) { }
-
-  private final Deque<JListInfo> stack = new ArrayDeque<JListInfo>();
-}
+  public void terminateCurrent() {
+    stack.pop();
+  }
 </code>
+
+Back in the ''Parser'' class, augment our jlist parsing logic with appropriate calls to these methods:
+<code java [highlight_lines_extra="3,8"]>
+    if (match(AND, OR)) {
+      Token op = previous();
+      jlists.startNew(op);
+      List<Expr> juncts = new ArrayList<Expr>();
+      do {
+        juncts.add(expression());
+      } while (matchBullet(op.type, op.column));
+      jlists.terminateCurrent();
+      return new Expr.Variadic(op, juncts);
+    }
+</code>
+
+Now we write a critical method.
+In ''JListContext'', define ''isNewBullet()'' to return true if the given token could act as the start of a new junct in the current jlist:
+<code>
+  public boolean isNewBullet(Token op) {
+    JListInfo current = this.stack.peekFirst();
+    return current != null
+        && current.type == op.type
+        && current.column == op.column;
+  }
+</code>
+''isNewBullet()'' first retrieves the top element of our stack, representing the current jlist.
+If we are not currently parsing a jlist, this element will be ''null'' and the method returns false.
+Otherwise, it checks the current jlist attributes against the given token.
+If the token type & column both match, the method returns true.
+
+Where should call this powerful method?
+There are actually a few possibilities, but I think it makes the most sense to check ''isNewBullet()'' in the ''matchOp()'' method of the ''Parser'' class:
+<code java [highlight_lines_extra="2"]>
+  private Operator matchOp(Fix fix, int prec) {
+    if (jlists.isNewBullet(peek())) return null;
+    for (Operator op : operators) {
+      if (op.fix == fix && op.lowPrec == prec) {
+        if (match(op.token)) return op;
+      }
+    }
+
+    return null;
+  }
+</code>
+
+This works!
+We can parse jlists again!
+It's a bit tricky to figure out what we actually did, so let's take a close look at our infix operator parsing code in ''operatorExpression()'':
+<code java>
+    Expr expr = operatorExpression(prec + 1);
+    while ((op = matchOp(INFIX, prec)) != null) {
+      Token operator = previous();
+      Expr right = operatorExpression(op.highPrec + 1);
+      expr = new Expr.Binary(expr, operator, right);
+      if (!op.assoc) return expr;
+    }
+</code>
+Consider what happens when trying to parse this TLA⁺ snippet:
+<code>
+op ==
+  /\ 1
+  /\ 2
+  /\ 3
+</code>
+The parser will:
+  - look for an expression following ''op ==''
+  - find ''/\'', push a new jlist to the stack, then look for an expression
+  - find ''1'' as the value of ''expr'' at the top of the infix op parsing loop
+  - call ''matchOp()'' with ''/\'' as the next token to be looked at
+  - in ''matchOp()'', call ''jlists.isNewBullet()'', and immediately return null
+
+If the call to ''jlists.isNewBullet()'' were not present, ''matchOp()'' would have matched the next ''/\'' as just another infix operator token.
+But we pre-empted it!
+So now ''/\'' and ''\/'' tokens will only be parsed as infix operator tokens when they would not be the start of a new junct in a currently-active jlist.
 
 Challenges:
   - If you are familiar with the [[https://en.wikipedia.org/wiki/Pumping_lemma_for_context-free_languages|pumping lemma for context-free languages]], use it to prove that TLA⁺ with jlists is not context-free.
+  - It's tempting to summarize this chapter as us solving the jlist parsing problem by making jlists have higher precedence than infix operators, but that is not quite the case. Think carefully about what precedence means; is there a difference between what might be called //lexical// or //scanning// precedence and parsing precedence? Did we make use of that here? What are some ways that parsers can deal with the problem of the same token having multiple possible meanings?
 
 [[creating:statements|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:operators|Next Page >]]
 
