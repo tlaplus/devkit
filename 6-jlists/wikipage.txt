@@ -17,11 +17,153 @@ op ==
 </code>
 
 Here, ''/\'' is conjunction and ''\/'' is disjunction.
-If a set of conjuncts or disjuncts are vertically aligned (have the same start column) then those juncts are grouped together.
+If a set of conjuncts or disjuncts ("juncts") are vertically aligned (have the same start column) then those juncts are grouped together.
 So, we want to parse the above example as ''(/\ A B (\/ C D))'', using our ''Expr.Variadic'' type.
 This is a very nice language feature, but parsing these lists properly is the greatest challenge we've yet faced.
 It is only a slight exaggeration to say the purpose of this entire tutorial series is to teach you how to parse these jlists.
 Let's begin!
+
+====== A First Attempt ======
+
+Before we increase the complexity of our parser, let's convince ourselves it is necessary.
+We will attempt to parse jlists using familiar recursive descent techniques, then see where it goes wrong.
+At first this seems like it should be possible!
+Our jlists resemble the set constructor ''{1, 2, 3}'' syntax in that they're started with a unique token (''\/'' or ''/\''), then feature an unbounded number of expressions separated by delimiters - here, ''\/'' or ''/\''.
+There isn't really a terminating token but that does not seem to be an obstacle.
+So, try adding this to the ''primary()'' method of your ''Parser'' class, below the set constructor logic; it uses the same ''do''/''while'' method to parse the juncts as the set constructor parsing logic uses to parse the element expressions:
+
+<code java [highlight_lines_extra="4,5,6,7,8,9,10,11"]>
+      return new Expr.Variadic(operator, elements);
+    }
+
+    if (match(AND, OR)) {
+      Token op = previous();
+      List<Expr> juncts = new ArrayList<Expr>();
+      do {
+        juncts.add(expression());
+      } while (matchBullet(op.type, op.column));
+      return new Expr.Variadic(op, juncts);
+    }
+
+    throw error(peek(), "Expect expression.");
+  }
+</code>
+
+Remember our special ''column'' field we added to the ''Token'' class way back in the scanning chapter?
+Now we put it to use in a new helper function for the ''Parser'' class, ''matchBullet()'':
+
+<code java>
+  private boolean matchBullet(TokenType op, int column) {
+    if (peek().type == op && peek().column == column) {
+      advance();
+      return true;
+    }
+    
+    return false;
+  }
+</code>
+
+''matchBullet()'' consumes a ''/\'' or ''\/'' token only if it is of the expected type and column.
+In this way our jlist parsing logic will only add another expression if it finds another vertically-aligned ''/\'' or ''\/'' token on the next line.
+This all... kind of works?
+You can parse a surprisingly broad set of jlists with just our simple logic!
+Try it out; here are some jlists that can now be parsed:
+<code>
+op ==
+  /\ 1
+  /\ 2
+</code>
+<code>
+op ==
+  \/ 1
+  \/ 2
+</code>
+<code>
+op ==
+  /\ 1
+  /\ \/ 2
+     \/ 3
+</code>
+Make them as nested and wild as you like, our code will handle them!
+So are we done?
+Unfortunately not.
+Here's the proverbial wrench: TLA⁺ also allows ''\/'' and ''/\'' as //infix operators//.
+We skipped defining them in the expressions chapter where we learned how to parse operators of different precedences; let's add them to ''operators'' table in our ''Token'' class now:
+
+<code java [highlight_lines_extra="5,6"]>
+private static final Operator[] operators = new Operator[] {
+    new Operator(PREFIX,  NOT,        true,   4,  4 ),
+    new Operator(PREFIX,  ENABLED,    false,  4,  15),
+    new Operator(PREFIX,  MINUS,      true,   12, 12),
+    new Operator(INFIX,   AND,        true,   3,  3 ),
+    new Operator(INFIX,   OR,         true,   3,  3 ),
+    new Operator(INFIX,   IN,         false,  5,  5 ),
+</code>
+
+Just like that, our jlist parsing code no longer works.
+''matchBullet()'' never has a chance to match a ''/\'' or ''\/'' token, because they're eaten up by ''operatorExpression()'' first.
+So, a jlist like:
+<code>
+op ==
+  /\ 1
+  /\ 2
+  /\ 3
+</code>
+is parsed as a jlist with a single conjunct, the expression ''1 /\ 2 /\ 3''.
+This is awful!
+How can we fix this?
+
+====== Beyond Context-Free ======
+
+The answer to our parsing problem is deceptively simple: before consuming a ''/\'' or ''\/'' token as an infix operator in ''operatorExpression()'', first we check whether that token could actually be the start of another junct in a jlist that is currently being parsed.
+For readers who have taken a computer science class in formal languages, alarm bells should be going off - changing the parse behavior depending on the current context is a //big// change!
+In theoretical terms, our parser is currently //context-free//: it doesn't matter what an ''expression()'' is being nested inside, it will be parsed the same no matter what.
+The context - or surrounding code being parsed - does not change how ''expression()'' behaves.
+However, if we want to parse jlists correctly we will need to break this limitation and move to the more powerful //context-sensitive// class of formal languages.
+
+What does this change mean in practical terms?
+First, it means we cannot easily write the formal TLA⁺ grammar in Backus-Naur Form (BNF) as we learned to do in [[https://craftinginterpreters.com/representing-code.html|Chapter 5: Representing Code]].
+Although grammar notation [[https://en.wikipedia.org/wiki/Context-sensitive_grammar|does exist]] for context-sensitive languages, it is unintuitive and more of a hindrance to langage implementers than a help.
+Thus formal TLA⁺ grammars exclude jlists and use BNF to define the non-jlist parts of the language, then use plain language to describe how jlists work.
+Second - returning to our parser implementation here - it means that our ''Parser'' class carries some additional mutable state in a class variable, and changes how it works depending on that state.
+
+Ultimately the shape of this state is a stack of nested jlists.
+Each entry in the stack records the type of jlist (conjunction or disjunction) and the column of its vertical alignment.
+When we start parsing a new jlist, we push its details to this stack.
+When we finish parsing a jlist, we pop it from the stack.
+The top of this stack is the "current" jlist context, and it modifies how some of our helper methods work.
+
+Some of the logic here gets a bit finicky, so let's encapsulate it within a class.
+Create a new file called ''JListContext.java''; import [[https://docs.oracle.com/javase/8/docs/api/java/util/Deque.html|deque]]-related classes so we have a stack:
+<code java>
+package tla;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
+
+import static tla.TokenType.*;
+
+class JListContext {
+  private final Deque<JListInfo> stack = new ArrayDeque<JListInfo>();
+}
+</code>
+
+We're going to use the handy Java 17 [[https://openjdk.org/jeps/395|records]] feature to cut down on boilerplate and define a quick ''JListInfo'' data class, along with a ''JListType'' enum:
+<code java [highlight_lines_extra="2,3,4,5,7"]>
+class JListContext {
+  private enum JListType {
+    CONJUNCTION,
+    DISJUNCTION
+  }
+
+  private record JListInfo(JListType type, int column) { }
+
+  private final Deque<JListInfo> stack = new ArrayDeque<JListInfo>();
+}
+</code>
+
+Challenges:
+  - If you are familiar with the [[https://en.wikipedia.org/wiki/Pumping_lemma_for_context-free_languages|pumping lemma for context-free languages]], use it to prove that TLA⁺ with jlists is not context-free.
 
 [[creating:statements|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:operators|Next Page >]]
 

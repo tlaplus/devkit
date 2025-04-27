@@ -2,25 +2,17 @@ package tla;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.NoSuchElementException;
 
 import static tla.TokenType.*;
 
 class JListContext {
 
-  private enum JunctionListType {
+  private enum JListType {
     CONJUNCTION,
     DISJUNCTION
   }
 
-  private class JListInfo {
-    public final JunctionListType Type;
-    public final int Column;
-    public JListInfo(JunctionListType type, int column) {
-      this.Type = type;
-      this.Column = column;
-    }
-  }
+  private record JListInfo(JListType type, int column) { }
 
   private final Deque<JListInfo> stack = new ArrayDeque<JListInfo>();
 
@@ -28,10 +20,10 @@ class JListContext {
     return AND == kind || OR == kind;
   }
 
-  private static JunctionListType asJListType(TokenType kind) {
+  private static JListType asJListType(TokenType kind) {
     switch (kind) {
-      case AND: return JunctionListType.CONJUNCTION;
-      case OR: return JunctionListType.DISJUNCTION;
+      case AND: return JListType.CONJUNCTION;
+      case OR: return JListType.DISJUNCTION;
       default: return null; // Unreachable
     }
   }
@@ -40,7 +32,7 @@ class JListContext {
     this.stack.push(new JListInfo(asJListType(op.type), op.column));
   }
 
-  public void terminateCurrentJList() throws NoSuchElementException {
+  public void terminateCurrentJList() {
     this.stack.pop();
   }
 
@@ -49,13 +41,13 @@ class JListContext {
     return
       headOrNull != null
       && isJListBulletToken(op.type)
-      && headOrNull.Column == op.column
-      && headOrNull.Type == asJListType(op.type);
+      && headOrNull.column == op.column
+      && headOrNull.type == asJListType(op.type);
   }
 
   public boolean isAboveCurrent(Token tok) {
     JListInfo headOrNull = this.stack.peekFirst();
-    return headOrNull == null || headOrNull.Column < tok.column;
+    return headOrNull == null || headOrNull.column < tok.column;
   }
 
   public void dump() {

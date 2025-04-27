@@ -130,12 +130,12 @@ class Parser {
 
     if (match(AND, OR)) {
       Token op = previous();
-      jlists.startNewJList(op);
+      //jlists.startNewJList(op);
       List<Expr> juncts = new ArrayList<Expr>();
       do {
         juncts.add(expression());
-      } while (matchBullet());
-      jlists.terminateCurrentJList();
+      } while (matchBullet(op.type, op.column));
+      //jlists.terminateCurrentJList();
       return new Expr.Variadic(op, juncts);
     }
 
@@ -163,17 +163,17 @@ class Parser {
     return lookahead;
   }
 
-  private boolean matchBullet() {
-    if (jlists.isNewBullet(peek())) {
+  private boolean matchBullet(TokenType op, int column) {
+    if (peek().type == op && peek().column == column) {
       advance();
       return true;
     }
-
+    
     return false;
   }
 
   private Operator matchOp(Fix fix, int prec) {
-    if (jlists.isNewBullet(peek())) return null;
+    //if (jlists.isNewBullet(peek())) return null;
     for (Operator op : operators) {
       if (op.fix == fix && op.lowPrec == prec) {
         if (match(op.token)) return op;
@@ -201,7 +201,7 @@ class Parser {
   }
 
   private boolean check(TokenType type) {
-    if (!jlists.isAboveCurrent(peek())) return false;
+    //if (!jlists.isAboveCurrent(peek())) return false;
     if (isAtEnd()) return false;
     return peek().type == type;
   }
