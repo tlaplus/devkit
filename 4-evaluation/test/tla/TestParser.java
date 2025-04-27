@@ -44,8 +44,6 @@ public class TestParser {
 
   @Test
   public void testBinaryExpressions() {
-    checkEqual("TRUE /\\ TRUE", "(/\\ true true)");
-    checkEqual("TRUE \\/ TRUE", "(\\/ true true)");
     checkEqual("1 \\in 1", "(\\in 1 1)");
     checkEqual("1 = 1", "(= 1 1)");
     checkEqual("1 < 1", "(< 1 1)");
@@ -58,16 +56,10 @@ public class TestParser {
   public void testBinaryAssociativity() {
     checkEqual("1 + 2 + 3", "(+ (+ 1 2) 3)");
     checkEqual("1 - 2 - 3", "(- (- 1 2) 3)");
-    checkEqual("1 /\\ 2 /\\ 3", "(/\\ (/\\ 1 2) 3)");
-    checkEqual("1 \\/ 2 \\/ 3", "(\\/ (\\/ 1 2) 3)");
   }
 
   @Test
   public void testPrecedence() {
-    checkEqual("1 /\\ 2 \\/ 3", "(\\/ (/\\ 1 2) 3)");
-    checkEqual("1 /\\ 2 \\in 3", "(/\\ 1 (\\in 2 3))");
-    checkEqual("1 /\\ 2 = 3", "(/\\ 1 (= 2 3))");
-    checkEqual("1 /\\ 2 < 3", "(/\\ 1 (< 2 3))");
     checkEqual("1 < 2 .. 3", "(< 1 (.. 2 3))");
     checkEqual("1 < 2 + 3", "(< 1 (+ 2 3))");
     checkEqual("1 + 2 - 3", "(+ 1 (- 2 3))");

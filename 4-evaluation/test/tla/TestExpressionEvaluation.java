@@ -49,10 +49,6 @@ public class TestExpressionEvaluation {
   public void testBinary() {
     assertEquals("3", interpret("1 + 2"));
     assertEquals("-1", interpret("1 - 2"));
-    assertEquals("false", interpret("TRUE /\\ FALSE"));
-    assertEquals("true", interpret("TRUE /\\ TRUE"));
-    assertEquals("true", interpret("TRUE \\/ FALSE"));
-    assertEquals("false", interpret("FALSE \\/ FALSE"));
     assertEquals("true", interpret("1 \\in {1,2,3}"));
     assertEquals("[1, 2, 3]", interpret("1 .. 3"));
     assertEquals("[]", interpret("3 .. 1"));
@@ -65,11 +61,6 @@ public class TestExpressionEvaluation {
     assertEquals("false", interpret("FALSE = TRUE"));
     assertEquals("true", interpret("(1 .. 3) = {1, 2, 3}"));
     assertEquals("false", interpret("(1 .. 3) = {1, 2}"));
-  }
-
-  @Test
-  public void testShortCircuitEvaluation() {
-    assertEquals("false", interpret("FALSE /\\ 123"));
   }
 
   @Test

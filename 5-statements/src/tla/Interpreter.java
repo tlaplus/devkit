@@ -50,22 +50,8 @@ class Interpreter implements Expr.Visitor<Object>,
   @Override
   public Object visitBinaryExpr(Expr.Binary expr) {
     Object left = evaluate(expr.left);
-    switch (expr.operator.type) {
-      case AND:
-        checkBooleanOperand(expr.operator, left);
-        if (!(boolean)left) return false;
-        Object right = evaluate(expr.right);
-        checkBooleanOperand(expr.operator, right);
-        return (boolean)right;
-      default:
-        break;
-    }
-
     Object right = evaluate(expr.right);
     switch (expr.operator.type) {
-      case OR:
-        checkBooleanOperands(expr.operator, left, right);
-        return (boolean)left || (boolean)right;
       case DOT_DOT:
         checkNumberOperands(expr.operator, left, right);
         Set<Object> set = new HashSet<Object>();

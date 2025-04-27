@@ -1,0 +1,40 @@
+
+The only binary operators remaining are logical ''AND'' & ''OR'', and they differ in a subtle but important way.
+We actually want ''AND'' to implement //short-circuit evaluation//, so an expression like ''FALSE /\ TRUE'' evaluates to ''false'' without even looking at the right hand operand.
+Add the highlighted lines near the top of the ''visitBinaryExpr()'' method:
+
+<code java [highlight_lines_extra="3,4,5,6,7,8,9,10"]>
+  public Object visitBinaryExpr(Expr.Binary expr) {
+    Object left = evaluate(expr.left);
+    switch (expr.operator.type) {
+      case AND:
+        if (!(boolean)left) return false;
+        Object right = evaluate(expr.right);
+        return (boolean)right;
+      default:
+        break;
+    }
+
+</code>
+
+In an odd contrast, our ''OR'' binary operator is //not// short-circuited.
+We add it in with the rest of the operators in ''visitBinaryExpr()'':
+
+<code java [highlight_lines_extra="3,4"]>
+    Object right = evaluate(expr.right);
+    switch (expr.operator.type) {
+      case OR:
+        return (boolean)left || (boolean)right;
+      case DOT_DOT:
+</code>
+
+Why are these different?
+It has to do with how they are used in TLA⁺ formulas.
+Actions are usually defined as a conjunction of expressions serving as guards, where later expressions could result in a runtime error if evaluated in some cases.
+For example, consider a variable ''x'' that can either be a sentinel value ''None'' or a set.
+People often write expressions like ''x /= None /\ 1 \in x''.
+It would be a runtime error to evaluate ''1 \in x'' if ''x = None''.
+It is thus useful to use conjunction as a guard stopping expression interpretation if the first operand is not true.
+In contrast, disjunction is used in TLA⁺ to express nondeterminism and so both branches of the disjunct need to be evaluated to see whether their expressions satisfy alternative next states.
+You can read [[https://groups.google.com/g/tlaplus/c/U6tOJ4dsjVM/m/1zXWHrZbBwAJ|this]] thread on the TLA⁺ mailing list for more information.
+

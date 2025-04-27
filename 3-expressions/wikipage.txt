@@ -36,7 +36,7 @@ unary          → (( "ENABLED" | "-" ) expression ) | ( expression "'" ) ;
 binary         → expression operator expression ;
 ternary        → "IF" expression "THEN" expression "ELSE" expression;
 variadic       → "{" ( expression ( "," expression )* )? "}"
-operator       → "=" | "+" | "-" | ".." | "/\" | "\/" | "<"  | "\in" ;
+operator       → "=" | "+" | "-" | ".." | "<"  | "\in" ;
 </code>
 There are a few interesting differences.
 The ''unary'' rule now captures both prefix //and// suffix operators, which both only accept a single parameter.
@@ -49,7 +49,8 @@ This one is so named because it's where we'll put operators accepting varying nu
 It's kind of weird to think of the finite set literal ''{1, 2, 3}'' as an operator, but it is!
 The only difference between ''{1, 2, 3}'' and an operator like ''constructSet(1, 2, 3)'' is syntactic sugar.
 This is the perspective of a language implementer.
-Later on we will extend the definition of ''variadic'' to include vertically-aligned conjunction & disjunction lists.
+
+Note that we //could// also include the conjunction ''/\'' and disjunction ''\/'' infix operators here but they have odd parsing interactions with vertically-aligned conjunction & disjunction lists, so we will handle them in a later chapter dedicated to that topic.
 
 ===== Section 5.2: Implementing Syntax Trees =====
 
@@ -447,8 +448,6 @@ Record their attributes in a table in ''Parser.java'', below ''operatorExpressio
     new Operator(PREFIX,  NOT,        true,   4,  4 ),
     new Operator(PREFIX,  ENABLED,    false,  4,  15),
     new Operator(PREFIX,  MINUS,      true,   12, 12),
-    new Operator(INFIX,   AND,        true,   3,  3 ),
-    new Operator(INFIX,   OR,         true,   3,  3 ),
     new Operator(INFIX,   IN,         false,  5,  5 ),
     new Operator(INFIX,   EQUAL,      false,  5,  5 ),
     new Operator(INFIX,   LESS_THAN,  false,  5,  5 ),

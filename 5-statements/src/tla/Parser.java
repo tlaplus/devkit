@@ -134,8 +134,6 @@ class Parser {
     new Operator(PREFIX,  NOT,        true,   4,  4 ),
     new Operator(PREFIX,  ENABLED,    false,  4,  15),
     new Operator(PREFIX,  MINUS,      true,   12, 12),
-    new Operator(INFIX,   AND,        true,   3,  3 ),
-    new Operator(INFIX,   OR,         true,   3,  3 ),
     new Operator(INFIX,   IN,         false,  5,  5 ),
     new Operator(INFIX,   EQUAL,      false,  5,  5 ),
     new Operator(INFIX,   LESS_THAN,  false,  5,  5 ),

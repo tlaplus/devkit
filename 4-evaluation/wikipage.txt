@@ -193,45 +193,6 @@ So expressions like ''1 .. 3'' produce the set ''{1, 2, 3}'' while ''3 .. 2'' pr
 We use ''Set<Object>'', so our sets can hold any value you can imagine including nested sets.
 It's incredible how much we get for free here; Java sets even implement value-based de-duplication and equality comparison for us for arbitrarily-nested sets!
 
-The only binary operators remaining are logical ''AND'' & ''OR'', and they differ in a subtle but important way.
-We actually want ''AND'' to implement //short-circuit evaluation//, so an expression like ''FALSE /\ TRUE'' evaluates to ''false'' without even looking at the right hand operand.
-Add the highlighted lines near the top of the ''visitBinaryExpr()'' method:
-
-<code java [highlight_lines_extra="3,4,5,6,7,8,9,10"]>
-  public Object visitBinaryExpr(Expr.Binary expr) {
-    Object left = evaluate(expr.left);
-    switch (expr.operator.type) {
-      case AND:
-        if (!(boolean)left) return false;
-        Object right = evaluate(expr.right);
-        return (boolean)right;
-      default:
-        break;
-    }
-
-</code>
-
-In an odd contrast, our ''OR'' binary operator is //not// short-circuited.
-We add it in with the rest of the operators in ''visitBinaryExpr()'':
-
-<code java [highlight_lines_extra="3,4"]>
-    Object right = evaluate(expr.right);
-    switch (expr.operator.type) {
-      case OR:
-        return (boolean)left || (boolean)right;
-      case DOT_DOT:
-</code>
-
-Why are these different?
-It has to do with how they are used in TLA⁺ formulas.
-Actions are usually defined as a conjunction of expressions serving as guards, where later expressions could result in a runtime error if evaluated in some cases.
-For example, consider a variable ''x'' that can either be a sentinel value ''None'' or a set.
-People often write expressions like ''x /= None /\ 1 \in x''.
-It would be a runtime error to evaluate ''1 \in x'' if ''x = None''.
-It is thus useful to use conjunction as a guard stopping expression interpretation if the first operand is not true.
-In contrast, disjunction is used in TLA⁺ to express nondeterminism and so both branches of the disjunct need to be evaluated to see whether their expressions satisfy alternative next states.
-You can read [[https://groups.google.com/g/tlaplus/c/U6tOJ4dsjVM/m/1zXWHrZbBwAJ|this]] thread on the TLA⁺ mailing list for more information.
-
 ==== Evaluating Other Operators ====
 
 Our ''IF''/''THEN''/''ELSE'' and set constructor operators are all that remain.
@@ -310,17 +271,12 @@ class RuntimeError extends RuntimeException {
 }
 </code>
 
-We also need some helpers for boolean operator parameters since TLA⁺ is more strict about that; add these to the ''Interpreter'' class:
+We also need a helper for booleans since TLA⁺ is more strict about them than Lox; add this to the ''Interpreter'' class:
 
 <code java>
   private void checkBooleanOperand(Token operator, Object operand) {
     if (operand instanceof Boolean) return;
     throw new RuntimeError(operator, "Operand must be a boolean.");
-  }
-
-  private void checkBooleanOperands(Token operator, Object left, Object right) {
-    if (left instanceof Boolean && right instanceof Boolean) return;
-    throw new RuntimeError(operator, "Operands must be booleans.");
   }
 </code>
 
@@ -381,21 +337,6 @@ Set membership:
       case IN:
         checkSetOperand(expr.operator, right);
         return ((Set<?>)right).contains(left);
-</code>
-Disjunction:
-<code java [highlight_lines_extra="2"]>
-      case OR:
-        checkBooleanOperands(expr.operator, left, right);
-        return (boolean)left || (boolean)right;
-</code>
-Conjunction:
-<code java [highlight_lines_extra="2,5"]>
-      case AND:
-        checkBooleanOperand(expr.operator, left);
-        if (!(boolean)left) return false;
-        Object right = evaluate(expr.right);
-        checkBooleanOperand(expr.operator, right);
-        return (boolean)right;
 </code>
 Finally, ''IF''/''THEN''/''ELSE'':
 <code java [highlight_lines_extra="3"]>
