@@ -13,7 +13,7 @@ op ==
   /\ A
   /\ B
   /\ \/ C
-     \/ D 
+     \/ D
 </code>
 
 Here, ''/\'' is conjunction and ''\/'' is disjunction.
@@ -57,7 +57,7 @@ Now we put it to use in a new helper function for the ''Parser'' class, ''matchB
       advance();
       return true;
     }
-    
+
     return false;
   }
 </code>
@@ -67,17 +67,17 @@ In this way our jlist parsing logic will only add another expression if it finds
 This all... kind of works?
 You can parse a surprisingly broad set of jlists with just our simple logic!
 Try it out; here are some jlists that can now be parsed:
-<code>
+<code haskell>
 op ==
   /\ 1
   /\ 2
 </code>
-<code>
+<code haskell>
 op ==
   \/ 1
   \/ 2
 </code>
-<code>
+<code haskell>
 op ==
   /\ 1
   /\ \/ 2
@@ -102,7 +102,7 @@ private static final Operator[] operators = new Operator[] {
 Just like that, our jlist parsing code no longer works.
 ''matchBullet()'' never has a chance to match a ''/\'' or ''\/'' token, because they're eaten up by ''operatorExpression()'' first.
 So, a jlist like:
-<code>
+<code haskell>
 op ==
   /\ 1
   /\ 2
@@ -110,11 +110,13 @@ op ==
 </code>
 is parsed as a jlist with a single conjunct, the expression ''1 /\ 2 /\ 3''.
 This is awful!
-How can we fix this?
+How can we fix it?
 
 ====== Beyond Context-Free ======
 
 The answer to our parsing problem is deceptively simple: before consuming a ''/\'' or ''\/'' token as an infix operator in ''operatorExpression()'', first we check whether that token could actually be the start of another junct in a jlist that is currently being parsed.
+If so, we prioritize treating the ''/\'' or ''\/'' token as the start of a new junct instead of an infix operator symbol.
+
 For readers who have taken a computer science class in formal languages, alarm bells should be going off - changing the parse behavior depending on the current context is a //big// change!
 In theoretical terms, our parser is currently //context-free//: it doesn't matter what an ''expression()'' is being nested inside, it will be parsed the same no matter what.
 The context - or surrounding code being parsed - does not change how ''expression()'' behaves.
@@ -124,7 +126,7 @@ What does this change mean in practical terms?
 First, it means we cannot easily write the formal TLA⁺ grammar in Backus-Naur Form (BNF) as we learned to do in [[https://craftinginterpreters.com/representing-code.html|Chapter 5: Representing Code]].
 Although grammar notation [[https://en.wikipedia.org/wiki/Context-sensitive_grammar|does exist]] for context-sensitive languages, it is unintuitive and more of a hindrance to langage implementers than a help.
 Thus formal TLA⁺ grammars exclude jlists and use BNF to define the non-jlist parts of the language, then use plain language to describe how jlists work.
-Second - returning to our parser implementation here - it means that our ''Parser'' class carries some additional mutable state in a class variable, and changes how it works depending on that state.
+Second - returning to our parser implementation here - it means that our ''Parser'' class carries some additional mutable state in a class variable, and its methods change their behavior based on that state.
 
 Ultimately the shape of this state is a stack of nested jlists.
 Each entry in the stack records the type of jlist (conjunction or disjunction) and the column of its vertical alignment.
@@ -185,9 +187,9 @@ Back in the ''Parser'' class, augment our jlist parsing logic with appropriate c
 
 Now we write a critical method.
 In ''JListContext'', define ''isNewBullet()'' to return true if the given token could act as the start of a new junct in the current jlist:
-<code>
+<code java>
   public boolean isNewBullet(Token op) {
-    JListInfo current = this.stack.peekFirst();
+    JListInfo current = stack.peekFirst();
     return current != null
         && current.type == op.type
         && current.column == op.column;
@@ -226,11 +228,10 @@ It's a bit tricky to figure out what we actually did, so let's take a close look
     }
 </code>
 Consider what happens when trying to parse this TLA⁺ snippet:
-<code>
+<code haskell>
 op ==
   /\ 1
   /\ 2
-  /\ 3
 </code>
 The parser will:
   - look for an expression following ''op ==''
@@ -238,14 +239,123 @@ The parser will:
   - find ''1'' as the value of ''expr'' at the top of the infix op parsing loop
   - call ''matchOp()'' with ''/\'' as the next token to be looked at
   - in ''matchOp()'', call ''jlists.isNewBullet()'', and immediately return null
+  - eventually return ''1'' to the jlist loop as a complete expression
+  - in the jlist loop, call ''matchBullet()'' to successfully consume ''/\''
 
 If the call to ''jlists.isNewBullet()'' were not present, ''matchOp()'' would have matched the next ''/\'' as just another infix operator token.
 But we pre-empted it!
-So now ''/\'' and ''\/'' tokens will only be parsed as infix operator tokens when they would not be the start of a new junct in a currently-active jlist.
+So now ''/\'' and ''\/'' tokens will only be parsed as infix operator tokens when they are not new juncts in a currently-active jlist.
 
-Challenges:
-  - If you are familiar with the [[https://en.wikipedia.org/wiki/Pumping_lemma_for_context-free_languages|pumping lemma for context-free languages]], use it to prove that TLA⁺ with jlists is not context-free.
-  - It's tempting to summarize this chapter as us solving the jlist parsing problem by making jlists have higher precedence than infix operators, but that is not quite the case. Think carefully about what precedence means; is there a difference between what might be called //lexical// or //scanning// precedence and parsing precedence? Did we make use of that here? What are some ways that parsers can deal with the problem of the same token having multiple possible meanings?
+====== Termination ======
+
+We're close, but we're not //quite// there yet.
+Consider the following TLA⁺ snippet:
+<code haskell>
+op ==
+  /\ 1
+  /\ \/ 2
+  /\ 3
+</code>
+Our code parses this as though it's actually:
+<code haskell>
+op ==
+  /\ 1
+  /\ \/ (2 /\ 3)
+</code>
+We thought we had defeated the tyranny of infix op ambiguity, but we were wrong!
+What happened?
+Well, our call to ''jlists.isNewBullet()'' checks the ''/\'' in ''/\ 3'' against the //top-most active jlist//, which is a ''\/'' at a different column!
+The enclosing ''/\'' jlist is not checked.
+You might be tempted to fix this by modifying ''isNewBullet()'' to check tokens against //all// the jlists in the stack, but actually this problem requires a deeper approach.
+
+Each junct's expression should be entirely contained to the right of its enclosing jlist's vertical alignment.
+Put another way, if you put a token on the next line to the left of the ''/\'' or ''\/'', that should terminate the jlist.
+That enables you to do neat things like:
+<code haskell>
+op ==
+  /\ A
+  /\ B
+  = C
+</code>
+which should be parsed as ''(A /\ B) = C''.
+The ''='' sign is not to the right of the jlist's vertical alignment, so it terminates that jlist.
+To check this, we need another helper method in ''JListContext'' class called ''isAboveCurrent()'':
+<code java>
+  public boolean isAboveCurrent(Token tok) {
+    JListInfo current = stack.peekFirst();
+    return current == null || current.column < tok.column;
+  }
+</code>
+
+We then add a call to ''isAboveCurrent()'' in a very fundamental helper method of our ''Parser'' class, ''check()'':
+<code java [highlight_lines_extra="2"]>
+  private boolean check(TokenType type) {
+    if (!jlists.isAboveCurrent(peek())) return false;
+    if (isAtEnd()) return false;
+    return peek().type == type;
+  }
+</code>
+
+What does this do?
+Well, within a given call to ''expression()'', it essentially forbids matching any tokens that are not to the right of the current jlist!
+If an expression is being parsed within the context of a jlist, and it encounters a token on the next line that is not to the right of the current jlist alignment, control flow is ultimately kicked back up to the jlist loop which then calls ''jlists.terminateCurrent()''.
+Parsing can then resume as expected.
+
+There is one other benefit we've unlocked.
+It isn't enough to parse valid jlists, we must also reject invalid ones!
+The TLA⁺ language specification requires that the parser reject attempts to defeat vertical alignment encapsulation by abusing delimiters like ''(''/'')'' or ''{''/''}''.
+What this means is that inputs like the following should fail to parse:
+<code haskell>
+op ==
+  /\ 1
+  /\ (2
+)
+  /\ 3
+</code>
+Indeed, our parser will detect an error here.
+The parentheses parsing logic will call ''consume()'' attempting to match the closing '')'', but within ''consume()'' the call to ''check()'' will always fail due to our call to ''jlists.aboveCurrent()''.
+This gives rise to a parse error.
+
+====== Error Recovery ======
+
+Talk of parsing errors nicely segues us onto the topic of error recovery.
+Recall that on error, we call ''synchronize()'' in the ''Parser'' class and desperately churn through tokens looking for the start of an operator definition.
+Jlists complicate this a bit!
+What happens if an error occurs while parsing a jlist and we enter ''synchronize()'' carrying around a bunch of state in the jlists stack?
+Well, nonsensical things happen.
+To fix this we just wipe out our jlist stack at the top of ''synchronize()'':
+<code java [highlight_lines_extra="2"]>
+  private void synchronize() {
+    jlists.dump();
+    advance();
+
+    while (!isAtEnd()) {
+</code>
+
+This calls a new helper we'll define in ''JListContext'':
+<code java>
+  public void dump() {
+    stack.clear();
+  }
+</code>
+
+Done.
+You've successfully parsed vertically-aligned conjunction & disjunction lists in TLA⁺!
+This puts you in rarified air.
+Only a handful of people in the world possess this knowledge, and now you are among them.
+If your code got out of sync during this tutorial, you can find its expected state [[https://github.com/tlaplus/devkit/tree/main/6-jlists|here]].
+Continue on the [[creating:operators|next page]], where we learn to parse operators with parameters!
+
+====== Challenges ======
+
+Here are a number of optional challenges, in roughly increasing levels of difficulty.
+
+  - Python uses indentation to determine statement membership in a code block. Does this make Python context-sensitive?
+  - It's tempting to summarize this chapter as us solving the jlist parsing problem by making jlists have higher precedence than infix operators, but that is not quite the case. Think carefully about what precedence means; is there a difference between what might be called //lexical// precedence - where one interpretation of a token takes higher precedence than another - and parsing precedence? Did we make use of that here? What are some ways that parsers can deal with the problem of the same token having multiple possible meanings?
+  - Jlists are not the only context-sensitive language construct in TLA⁺. Nested proof steps are another. Take some time to read the [[https://lamport.azurewebsites.net/tla/tla2-guide.pdf|TLA⁺ 2 language spec (pdf)]] and think about what makes proof syntax context-sensitive and how you might parse it if you had to.
+  - Write unit tests for your jlist parsing code. Think of every weird jlist case you can. Look at [[https://github.com/tlaplus/rfcs/blob/2a772d9dd11acec5d7dedf30abfab91a49de48b8/language_standard/tests/tlaplus_syntax/conjlist.txt|this standard test file]] for inspiration.
+  - If you are familiar with the [[https://youtu.be/IycOPFmEQk8|pumping lemma for context-free languages]], use it to prove that TLA⁺ with jlists is not context-free.
+  - Most courses in formal languages skip directly from context-free grammars to Turing machines, but this misses a number of automata of intermediate power. See whether it is possible to use [[https://cs.stackexchange.com/a/170282/110483|context-free grammars with storage]] to concisely express a formal grammar for TLA⁺ that includes jlists. The viability of this is unknown; share your results with [[https://groups.google.com/g/tlaplus|the mailing list]] if accomplished!
 
 [[creating:statements|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:operators|Next Page >]]
 

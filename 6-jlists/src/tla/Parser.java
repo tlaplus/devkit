@@ -168,7 +168,7 @@ class Parser {
       advance();
       return true;
     }
-    
+
     return false;
   }
 

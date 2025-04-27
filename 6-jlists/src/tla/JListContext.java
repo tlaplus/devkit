@@ -18,18 +18,18 @@ class JListContext {
   }
 
   public boolean isNewBullet(Token op) {
-    JListInfo current = this.stack.peekFirst();
+    JListInfo current = stack.peekFirst();
     return current != null
         && current.type == op.type
         && current.column == op.column;
   }
 
   public boolean isAboveCurrent(Token tok) {
-    JListInfo current = this.stack.peekFirst();
+    JListInfo current = stack.peekFirst();
     return current == null || current.column < tok.column;
   }
 
   public void dump() {
-    this.stack.clear();
+    stack.clear();
   }
 }

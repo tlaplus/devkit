@@ -11,4 +11,5 @@ Each tutorial page has a corresponding mirror/backup/snapshot directory in this 
 |       3 | [Parsing Constant TLA⁺ Expressions](https://docs.tlapl.us/creating:expressions)   | [3-expressions](3-expressions) |
 |       4 | [Evaluating Constant TLA⁺ Expressions](https://docs.tlapl.us/creating:evaluation) | [4-evaluation](4-evaluation)   |
 |       5 | [Handling TLA⁺ Statements](https://docs.tlapl.us/creating:statements)             | [5-statements](5-statements)   |
+|       6 | [Conjunction & Disjunction Lists](https://docs.tlapl.us/creating:jlists)          | [6-jlists](6-jlists)           |
 
