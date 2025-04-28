@@ -38,7 +38,7 @@ So, try adding this to the ''primary()'' method of your ''Parser'' class, below 
 
     if (match(AND, OR)) {
       Token op = previous();
-      List<Expr> juncts = new ArrayList<Expr>();
+      List<Expr> juncts = new ArrayList<>();
       do {
         juncts.add(expression());
       } while (matchBullet(op.type, op.column));
@@ -91,12 +91,12 @@ We skipped defining them in the expressions chapter where we learned how to pars
 
 <code java [highlight_lines_extra="5,6"]>
 private static final Operator[] operators = new Operator[] {
-    new Operator(PREFIX,  NOT,        true,   4,  4 ),
-    new Operator(PREFIX,  ENABLED,    false,  4,  15),
-    new Operator(PREFIX,  MINUS,      true,   12, 12),
-    new Operator(INFIX,   AND,        true,   3,  3 ),
-    new Operator(INFIX,   OR,         true,   3,  3 ),
-    new Operator(INFIX,   IN,         false,  5,  5 ),
+    new Operator(Fix.PREFIX,  NOT,        true,   4,  4 ),
+    new Operator(Fix.PREFIX,  ENABLED,    false,  4,  15),
+    new Operator(Fix.PREFIX,  MINUS,      true,   12, 12),
+    new Operator(Fix.INFIX,   AND,        true,   3,  3 ),
+    new Operator(Fix.INFIX,   OR,         true,   3,  3 ),
+    new Operator(Fix.INFIX,   IN,         false,  5,  5 ),
 </code>
 
 Just like that, our jlist parsing code no longer works.
@@ -114,8 +114,9 @@ How can we fix it?
 
 ====== Beyond Context-Free ======
 
-The answer to our parsing problem is deceptively simple: before consuming a ''/\'' or ''\/'' token as an infix operator in ''operatorExpression()'', first we check whether that token could actually be the start of another junct in a jlist that is currently being parsed.
-If so, we prioritize treating the ''/\'' or ''\/'' token as the start of a new junct instead of an infix operator symbol.
+The answer to our parsing problem is deceptively simple: before matching a token in ''check()'', we first check to ensure it starts on a column to the right of the current jlist's column.
+If the token instead starts to the left or equal to the current jlist's column, the match fails and the token is not consumed - even if the token is what is expected by the caller to ''check()''!
+If we aren't currently parsing a jlist then ''check()'' functions as normal.
 
 For readers who have taken a computer science class in formal languages, alarm bells should be going off - changing the parse behavior depending on the current context is a //big// change!
 In theoretical terms, our parser is currently //context-free//: it doesn't matter what an ''expression()'' is being nested inside, it will be parsed the same no matter what.
@@ -129,98 +130,63 @@ Thus formal TLA⁺ grammars exclude jlists and use BNF to define the non-jlist p
 Second - returning to our parser implementation here - it means that our ''Parser'' class carries some additional mutable state in a class variable, and its methods change their behavior based on that state.
 
 Ultimately the shape of this state is a stack of nested jlists.
-Each entry in the stack records the type of jlist (conjunction or disjunction) and the column of its vertical alignment.
-When we start parsing a new jlist, we push its details to this stack.
-When we finish parsing a jlist, we pop it from the stack.
-The top of this stack is the "current" jlist context, and it modifies how some of our helper methods work.
+Each entry in the stack records the column of a jlist's vertical alignment.
+When we start parsing a new jlist, we push its column to this stack.
+When we finish parsing a jlist, we pop from the stack.
+The top of this stack is the "current" jlist context, and it modifies how ''check()'' works.
 
-Some of the logic here gets a bit finicky, so let's encapsulate it within a class.
-Create a new file called ''JListContext.java''; import [[https://docs.oracle.com/javase/8/docs/api/java/util/Deque.html|deque]]-related classes so we have a stack, and use the handy Java 17 [[https://openjdk.org/jeps/395|records]] feature to cut down on boilerplate and define a quick ''JListInfo'' class for our stack to hold:
-<code java>
-package tla;
-
-import java.util.ArrayDeque;
-import java.util.Deque;
-
-class JListContext {
-
-  private record JListInfo(TokenType type, int column) { }
-
-  private final Deque<JListInfo> stack = new ArrayDeque<>();
-}
-</code>
-
-Add an instance of ''JListContext'' as a new class variable in the ''Parser'' class:
-
+We'll be using Java's ''[[https://docs.oracle.com/javase/8/docs/api/java/util/ArrayDeque.html|ArrayDeque]]'' class as a stack.
+It only needs to hold the jlist column.
+Define a new class variable near the top of the ''Parser'' class:
 <code java [highlight_lines_extra="4"]>
   private final List<Token> tokens;
   private int current = 0;
   private final boolean replMode;
-  private final JListContext jlists = new JListContext();
+  private final ArrayDeque<Integer> jlists = new ArrayDeque<>();
 </code>
 
-In the ''JListContext'' class, add some helpers to create a new jlist or terminate the current one:
+Import ''ArrayDeque'' at the top of ''Parser.java'':
+<code java [highlight_lines_extra="5"]>
+package tla;
 
-<code java>
-  public void startNew(Token op) {
-    stack.push(new JListInfo(op.type, op.column));
-  }
+import java.util.List;
+import java.util.ArrayList;
+import java.util.ArrayDeque;
 
-  public void terminateCurrent() {
-    stack.pop();
-  }
+import static tla.TokenType.*;
+
+class Parser {
 </code>
 
-Back in the ''Parser'' class, augment our jlist parsing logic with appropriate calls to these methods:
+Now augment our jlist parsing logic in ''primary()'' to push to & pop from the ''jlists'' stack when beginning and ending a jlist:
 <code java [highlight_lines_extra="3,8"]>
     if (match(AND, OR)) {
       Token op = previous();
-      jlists.startNew(op);
-      List<Expr> juncts = new ArrayList<Expr>();
+      jlists.push(op.column);
+      List<Expr> juncts = new ArrayList<>();
       do {
         juncts.add(expression());
       } while (matchBullet(op.type, op.column));
-      jlists.terminateCurrent();
+      jlists.pop();
       return new Expr.Variadic(op, juncts);
     }
 </code>
 
-Now we write a critical method.
-In ''JListContext'', define ''isNewBullet()'' to return true if the given token could act as the start of a new junct in the current jlist:
-<code java>
-  public boolean isNewBullet(Token op) {
-    JListInfo current = stack.peekFirst();
-    return current != null
-        && current.type == op.type
-        && current.column == op.column;
-  }
-</code>
-''isNewBullet()'' first retrieves the top element of our stack, representing the current jlist.
-If we are not currently parsing a jlist, this element will be ''null'' and the method returns false.
-Otherwise, it checks the current jlist attributes against the given token.
-If the token type & column both match, the method returns true.
-
-Where should call this powerful method?
-There are actually a few possibilities, but I think it makes the most sense to check ''isNewBullet()'' in the ''matchOp()'' method of the ''Parser'' class:
-<code java [highlight_lines_extra="2"]>
-  private Operator matchOp(Fix fix, int prec) {
-    if (jlists.isNewBullet(peek())) return null;
-    for (Operator op : operators) {
-      if (op.fix == fix && op.lowPrec == prec) {
-        if (match(op.token)) return op;
-      }
-    }
-
-    return null;
+Then add this critical line to the ''check()'' helper, to always return false if we are inside a jlist and the next token is not to the right of the jlist's column:
+<code java [highlight_lines_extra="3"]>
+  private boolean check(TokenType type) {
+    if (isAtEnd()) return false;
+    if (!jlists.isEmpty() && peek().column <= jlists.peek()) return false;
+    return peek().type == type;
   }
 </code>
 
 This works!
 We can parse jlists again!
-It's a bit tricky to figure out what we actually did, so let's take a close look at our infix operator parsing code in ''operatorExpression()'':
+It's a bit tricky to figure out how this changes things in practice, so let's take a close look at our infix operator parsing code in ''operatorExpression()'':
 <code java>
     Expr expr = operatorExpression(prec + 1);
-    while ((op = matchOp(INFIX, prec)) != null) {
+    while ((op = matchOp(Fix.INFIX, prec)) != null) {
       Token operator = previous();
       Expr right = operatorExpression(op.highPrec + 1);
       expr = new Expr.Binary(expr, operator, right);
@@ -238,68 +204,14 @@ The parser will:
   - find ''/\'', push a new jlist to the stack, then look for an expression
   - find ''1'' as the value of ''expr'' at the top of the infix op parsing loop
   - call ''matchOp()'' with ''/\'' as the next token to be looked at
-  - in ''matchOp()'', call ''jlists.isNewBullet()'', and immediately return null
-  - eventually return ''1'' to the jlist loop as a complete expression
+  - in ''matchOp()'', ultimately call ''check()'' which returns false because of our new logic
+  - never enter the infix op parsing loop and return ''1'' to the jlist loop as a complete expression
   - in the jlist loop, call ''matchBullet()'' to successfully consume ''/\''
 
-If the call to ''jlists.isNewBullet()'' were not present, ''matchOp()'' would have matched the next ''/\'' as just another infix operator token.
+If the line we added in ''check()'' were not present, ''matchOp()'' would have matched the next ''/\'' as just another infix operator token.
 But we pre-empted it!
-So now ''/\'' and ''\/'' tokens will only be parsed as infix operator tokens when they are not new juncts in a currently-active jlist.
-
-====== Termination ======
-
-We're close, but we're not //quite// there yet.
-Consider the following TLA⁺ snippet:
-<code haskell>
-op ==
-  /\ 1
-  /\ \/ 2
-  /\ 3
-</code>
-Our code parses this as though it's actually:
-<code haskell>
-op ==
-  /\ 1
-  /\ \/ (2 /\ 3)
-</code>
-We thought we had defeated the tyranny of infix op ambiguity, but we were wrong!
-What happened?
-Well, our call to ''jlists.isNewBullet()'' checks the ''/\'' in ''/\ 3'' against the //top-most active jlist//, which is a ''\/'' at a different column!
-The enclosing ''/\'' jlist is not checked.
-You might be tempted to fix this by modifying ''isNewBullet()'' to check tokens against //all// the jlists in the stack, but actually this problem requires a deeper approach.
-
-Each junct's expression should be entirely contained to the right of its enclosing jlist's vertical alignment.
-Put another way, if you put a token on the next line to the left of the ''/\'' or ''\/'', that should terminate the jlist.
-That enables you to do neat things like:
-<code haskell>
-op ==
-  /\ A
-  /\ B
-  = C
-</code>
-which should be parsed as ''(A /\ B) = C''.
-The ''='' sign is not to the right of the jlist's vertical alignment, so it terminates that jlist.
-To check this, we need another helper method in the ''JListContext'' class called ''isAboveCurrent()'':
-<code java>
-  public boolean isAboveCurrent(Token tok) {
-    JListInfo current = stack.peekFirst();
-    return current == null || current.column < tok.column;
-  }
-</code>
-
-We then add a call to ''isAboveCurrent()'' in a very fundamental helper method of our ''Parser'' class, ''check()'':
-<code java [highlight_lines_extra="2"]>
-  private boolean check(TokenType type) {
-    if (!jlists.isAboveCurrent(peek())) return false;
-    if (isAtEnd()) return false;
-    return peek().type == type;
-  }
-</code>
-
-What does this do?
-Well, within a given call to ''expression()'', it essentially forbids matching any tokens that are not to the right of the current jlist!
-If an expression is being parsed within the context of a jlist, and it encounters a token on the next line that is not to the right of the current jlist alignment, control flow is ultimately kicked back up to the jlist loop which then calls ''jlists.terminateCurrent()''.
-Parsing can then resume as expected.
+So now ''/\'' and ''\/'' tokens will only be parsed as infix operator tokens when they are to the right of the current jlist.
+Note that our ''matchBullet()'' helper was intentionally written not to use ''check()'' so that it is actually capable of matching & consuming the ''/\'' or ''\/'' token.
 
 There is one other benefit we've unlocked.
 It isn't enough to parse valid jlists, we must also reject invalid ones!
@@ -313,7 +225,7 @@ op ==
   /\ 3
 </code>
 Indeed, our parser will detect an error here.
-The parentheses parsing logic will call ''consume()'' attempting to match the closing '')'', but within ''consume()'' the call to ''check()'' will always fail due to our call to ''jlists.aboveCurrent()''.
+The parentheses parsing logic will call ''consume()'' attempting to match the closing '')'', but within ''consume()'' the call to ''check()'' will always fail since '')'' is not to the right of the current jlist column.
 This gives rise to a parse error.
 
 ====== Error Recovery ======
@@ -321,22 +233,15 @@ This gives rise to a parse error.
 Talk of parsing errors nicely segues us onto the topic of error recovery.
 Recall that on error, we call ''synchronize()'' in the ''Parser'' class and desperately churn through tokens looking for the start of an operator definition.
 Jlists complicate this a bit!
-What happens if an error occurs while parsing a jlist and we enter ''synchronize()'' carrying around a bunch of state in the jlists stack?
+What happens if an error occurs while parsing a jlist and we enter ''synchronize()'' carrying around a bunch of state in the ''jlists'' stack?
 Well, nonsensical things happen.
 To fix this we just wipe out our jlist stack at the top of ''synchronize()'':
 <code java [highlight_lines_extra="2"]>
   private void synchronize() {
-    jlists.dump();
+    jlists.clear();
     advance();
 
     while (!isAtEnd()) {
-</code>
-
-This calls a new helper we'll define in ''JListContext'':
-<code java>
-  public void dump() {
-    stack.clear();
-  }
 </code>
 
 Done.

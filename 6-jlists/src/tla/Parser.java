@@ -2,7 +2,6 @@ package tla;
 
 import java.util.List;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.ArrayDeque;
 
 import static tla.TokenType.*;
@@ -12,12 +11,11 @@ class Parser {
   private static record Operator(Fix fix, TokenType token,
       boolean assoc, int lowPrec, int highPrec) { }
   private static class ParseError extends RuntimeException {}
-  private static record JListInfo(TokenType type, int column) { }
 
   private final List<Token> tokens;
   private int current = 0;
   private final boolean replMode;
-  private final Deque<JListInfo> jlists = new ArrayDeque<>();
+  private final ArrayDeque<Integer> jlists = new ArrayDeque<>();
 
   Parser(List<Token> tokens, boolean replMode) {
     this.tokens = tokens;
@@ -123,7 +121,7 @@ class Parser {
 
     if (match(LEFT_BRACE)) {
       Token operator = previous();
-      List<Expr> elements = new ArrayList<Expr>();
+      List<Expr> elements = new ArrayList<>();
       if (RIGHT_BRACE != peek().type) {
         do {
           elements.add(expression());
@@ -135,8 +133,8 @@ class Parser {
 
     if (match(AND, OR)) {
       Token op = previous();
-      jlists.push(new JListInfo(op.type, op.column));
-      List<Expr> juncts = new ArrayList<Expr>();
+      jlists.push(op.column);
+      List<Expr> juncts = new ArrayList<>();
       do {
         juncts.add(expression());
       } while (matchBullet(op.type, op.column));
@@ -206,7 +204,7 @@ class Parser {
 
   private boolean check(TokenType type) {
     if (isAtEnd()) return false;
-    if (!jlists.isEmpty() && peek().column <= jlists.peek().column) return false;
+    if (!jlists.isEmpty() && peek().column <= jlists.peek()) return false;
     return peek().type == type;
   }
 
