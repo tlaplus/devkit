@@ -58,8 +58,8 @@ public class TestExpressionParsing {
   public void testBinaryAssociativity() {
     checkEqual("1 + 2 + 3", "(+ (+ 1 2) 3)");
     checkEqual("1 - 2 - 3", "(- (- 1 2) 3)");
-    checkEqual("1 /\\ 2 /\\ 3", "(/\\ (/\\ 1 2) 3)");
-    checkEqual("1 \\/ 2 \\/ 3", "(\\/ (\\/ 1 2) 3)");
+    checkEqual("1 /\\ 2 /\\ 3", "(/\\ 1 2 3)");
+    checkEqual("1 \\/ 2 \\/ 3", "(\\/ 1 2 3)");
   }
 
   @Test

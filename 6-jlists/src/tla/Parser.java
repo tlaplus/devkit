@@ -78,7 +78,7 @@ class Parser {
     while ((op = matchOp(Fix.INFIX, prec)) != null) {
       Token operator = previous();
       Expr right = operatorExpression(op.highPrec + 1);
-      expr = new Expr.Binary(expr, operator, right);
+      expr = flattenInfix(expr, operator, right);
       if (!op.assoc) return expr;
     }
 
@@ -139,7 +139,7 @@ class Parser {
         juncts.add(expression());
       } while (matchBullet(op.type, op.column));
       jlists.pop();
-      return new Expr.Variadic(op, juncts);
+      return flattenJLists(op, juncts);
     }
 
     throw error(peek(), "Expect expression.");
@@ -159,6 +159,45 @@ class Parser {
     new Operator(Fix.INFIX,   MINUS,      true,   11, 11),
     new Operator(Fix.POSTFIX, PRIME,      false,  15, 15),
   };
+
+  private Expr flattenInfix(Expr left, Token op, Expr right) {
+    if (op.type == AND) {
+      List<Expr> conjuncts = new ArrayList<>();
+      conjuncts.add(left);
+      conjuncts.add(right);
+      return flattenJLists(op, conjuncts);
+    } else if (op.type == OR) {
+      List<Expr> disjuncts = new ArrayList<>();
+      disjuncts.add(left);
+      disjuncts.add(right);
+      return flattenJLists(op, disjuncts);
+    } else {
+      return new Expr.Binary(left, op, right);
+    }
+  }
+
+  private Expr flattenJLists(Token op, List<Expr> juncts) {
+    List<Expr> flattened = new ArrayList<>();
+    for (Expr junct : juncts) {
+      Expr.Variadic vjunct;
+      if ((vjunct = asVariadicOp(op, junct)) != null) {
+        flattened.addAll(vjunct.parameters);
+      } else {
+        flattened.add(junct);
+      }
+    }
+
+    return new Expr.Variadic(op, flattened);
+  }
+
+  private Expr.Variadic asVariadicOp(Token op, Expr expr) {
+    if (expr instanceof Expr.Variadic) {
+      Expr.Variadic vExpr = (Expr.Variadic)expr;
+      if (vExpr.operator.type == op.type) return vExpr;
+    }
+
+    return null;
+  }
 
   private Parser lookahead() {
     Parser lookahead = new Parser(tokens, replMode);

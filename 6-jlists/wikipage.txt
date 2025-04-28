@@ -248,6 +248,170 @@ Done.
 You've successfully parsed vertically-aligned conjunction & disjunction lists in TLA⁺!
 This puts you in rarified air.
 Only a handful of people in the world possess this knowledge, and now you are among them.
+
+====== Evaluation ======
+
+Now that we can parse jlists, let's interpret them.
+Similar to the logical operators covered in the book, jlists short-circuit.
+This means juncts are evaluated in order and, if a conjunct is false or a disjunct is true, evaluation stops and immediately returns false or true respectively.
+
+Add conjunction list evaluation logic to ''visitVariadicExpr()'' in the ''Interpreter'' class, below the set constructor logic:
+<code java [highlight_lines_extra="2,3,4,5,6,7,8"]>
+        return set;
+      case AND:
+        for (Expr conjunct : expr.parameters) {
+          Object result = evaluate(conjunct);
+          checkBooleanOperand(expr.operator, result);
+          if (!(boolean)result) return false;
+        }
+        return true;
+      default:
+        // Unreachable.
+        return null
+</code>
+
+Then add the disjunction list logic right below that:
+<code java [highlight_lines_extra="2,3,4,5,6,7,8"]>
+        return true;
+      case OR:
+        for (Expr disjunct : expr.parameters) {
+          Object result = evaluate(disjunct);
+          checkBooleanOperand(expr.operator, result);
+          if ((boolean)result) return true;
+        }
+        return false;
+      default:
+        // Unreachable.
+        return null;
+</code>
+
+Remember we also parsed the ''/\'' and ''\/'' //infix// operators, so we need to evaluate those as well.
+This is a bit annoying!
+They should function in the exact same way as their respective jlists, but now we have to copy a duplicate of our evaluation logic to ''visitBinaryExpr()''.
+So, we'll perform a trick which also has its parallel in chapter 9 of the book: [[https://craftinginterpreters.com/control-flow.html#desugaring|desugaring]]!
+We will flatten infix ''/\'' and ''\/'' operators so they actually form a jlist.
+
+In the ''Parser'' class, modify the infix operator parsing loop in ''operatorExpression()'' by replacing the ''expr ='' line with a call to a new helper, ''flattenInfix()'':
+<code java [highlight_lines_extra="5"]>
+    Expr expr = operatorExpression(prec + 1);
+    while ((op = matchOp(Fix.INFIX, prec)) != null) {
+      Token operator = previous();
+      Expr right = operatorExpression(op.highPrec + 1);
+      expr = flattenInfix(expr, operator, right);
+      if (!op.assoc) return expr;
+    }
+</code>
+
+Define ''flattenInfix()'' above ''matchBullet()'' in the ''Parser'' class:
+<code java>
+  private Expr flattenInfix(Expr left, Token op, Expr right) {
+    if (op.type == AND) {
+      
+    } else if (op.type == OR) {
+      
+    } else {
+      return new Expr.Binary(left, op, right);
+    }
+  }
+</code>
+The helper returns a regular binary expression except when the operator is ''AND'' or ''OR''; in those cases, we return two-parameter instances of ''Expr.Variadic'' instead:
+<code java [highlight_lines_extra="3,4,5,6,8,9,10,11"]>
+  private Expr flattenInfix(Expr left, Token op, Expr right) {
+    if (op.type == AND) {
+      List<Expr> conjuncts = new ArrayList<>();
+      conjuncts.add(left);
+      conjuncts.add(right);
+      return new Expr.Variadic(op, conjuncts);    
+    } else if (op.type == OR) {
+      List<Expr> disjuncts = new ArrayList<>();
+      disjuncts.add(left);
+      disjuncts.add(right);
+      return new Expr.Variadic(op, disjuncts);
+    } else {
+      return new Expr.Binary(left, op, right);
+    }
+  }
+</code>
+
+====== Further Desugaring ======
+
+This is all right, but it could be even better!
+An expression like ''1 /\ 2 /\ 3 /\ 4'' will be translated to:
+<code haskell>
+/\ /\ /\ 1
+      /\ 2
+   /\ 3
+/\ 4
+</code>
+Which is quite a lot of nesting!
+It would be nice if it were instead translated to a single flat jlist with four conjuncts.
+This rewrite is safe because conjunction & disjunction are associative.
+So, define a new ''flattenJLists()'' helper which accepts a list of juncts, then builds a new jlist by flattening any nested jlists inside the juncts if they're the same type as the containing jlist.
+Here's what it looks like:
+<code java>
+  private Expr flattenJLists(Token op, List<Expr> juncts) {
+    List<Expr> flattened = new ArrayList<>();
+    for (Expr junct : juncts) {
+      Expr.Variadic vjunct;
+      if ((vjunct = asVariadicOp(op, junct)) != null) {
+        flattened.addAll(vjunct.parameters);
+      } else {
+        flattened.add(junct);
+      }
+    }
+
+    return new Expr.Variadic(op, flattened);
+  }
+</code>
+
+This uses Java's conditional-assign syntax along with the ''asVariadicOp()'' helper, which returns an ''Expr.Variadic'' instance if the given expression is a jlist of the given type:
+<code java>
+  private Expr.Variadic asVariadicOp(Token op, Expr expr) {
+    if (expr instanceof Expr.Variadic) {
+      Expr.Variadic vExpr = (Expr.Variadic)expr;
+      if (vExpr.operator.type == op.type) return vExpr;
+    }
+
+    return null;
+  }
+</code>
+
+Replace the calls to ''new Expr.Variadic()'' in ''flattenInfix()'' with calls to ''flattenJLists()'' instead:
+<code java [highlight_lines_extra="6,11"]>
+  private Expr flattenInfix(Expr left, Token op, Expr right) {
+    if (op.type == AND) {
+      List<Expr> conjuncts = new ArrayList<>();
+      conjuncts.add(left);
+      conjuncts.add(right);
+      return flattenJLists(op, conjuncts);
+    } else if (op.type == OR) {
+      List<Expr> disjuncts = new ArrayList<>();
+      disjuncts.add(left);
+      disjuncts.add(right);
+      return flattenJLists(op, disjuncts);
+    } else {
+      return new Expr.Binary(left, op, right);
+    }
+  }
+</code>
+
+Do the same in the jlist parsing loop in ''primary()'':
+<code java [highlight_lines_extra="9"]>
+    if (match(AND, OR)) {
+      Token op = previous();
+      jlists.push(op.column);
+      List<Expr> juncts = new ArrayList<>();
+      do {
+        juncts.add(expression());
+      } while (matchBullet(op.type, op.column));
+      jlists.pop();
+      return flattenJLists(op, juncts);
+    }
+</code>
+
+Infix ''/\'' and ''\/'' operators will now be interpreted by our jlist evaluation code, and jlists will be as flat as they possibly can be.
+So concludes this lynchpin tutorial on conjunction & disjunction lists.
+Good job making it to the end!
 If your code got out of sync during this tutorial, you can find its expected state [[https://github.com/tlaplus/devkit/tree/main/6-jlists|here]].
 Continue on the [[creating:operators|next page]], where we learn to parse operators with parameters!
 
