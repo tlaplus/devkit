@@ -397,47 +397,17 @@ Before filling out ''operatorExpression()'', we'll add the helper methods; these
 </code>
 
 Now we have to define a table of operators with their details.
-For this, create a new file ''Operator.java'' containing a class recording operator fix type, token type, associativity, and precedence range:
+First use the handy Java 17 [[https://openjdk.org/jeps/395|records]] feature to quickly define a new ''Operator'' dataclass; this will hold the attributes of the operators we want to parse.
+Put it at the top of the ''Parser'' class:
 
-<code java>
-package tla;
-
-enum Fix {
-  PREFIX, INFIX, POSTFIX
-}
-
-class Operator {
-  final Fix fix;
-  final TokenType token;
-  final boolean assoc;
-  final int lowPrec;
-  final int highPrec;
-
-  public Operator(Fix fix, TokenType token, boolean assoc,
-                  int lowPrec, int highPrec) {
-    this.fix = fix;
-    this.token = token;
-    this.assoc = assoc;
-    this.lowPrec = lowPrec;
-    this.highPrec = highPrec;
-  }
-}
-</code>
-
-For convenience, import the ''Fix'' enum values in ''Parser.java'' so they can be referenced directly:
-
-<code java [highlight_lines_extra="7"]>
-package tla;
-
-import java.util.List;
-import java.util.ArrayList;
-
-import static tla.TokenType.*;
-import static tla.Fix.*;
-
+<code java [highlight_lines_extra="2,3,4"]>
 class Parser {
-</code>
+  private static enum Fix { PREFIX, INFIX, POSTFIX }
+  private static record Operator(Fix fix, TokenType token,
+      boolean assoc, int lowPrec, int highPrec) {}
 
+  private final List<Token> tokens;
+</code>
 
 You can find operator attributes on page 271 of //[[https://lamport.azurewebsites.net/tla/book.html|Specifying Systems]]// by Leslie Lamport, or [[https://github.com/tlaplus/tlaplus/blob/13e5a39b5368a6da4906b8ed1c2c1114d2e7de15/tlatools/org.lamport.tlatools/src/tla2sany/parser/Operators.java#L130-L234|this TLA⁺ tools source file]].
 We use a small subset of these operators.
@@ -445,16 +415,16 @@ Record their attributes in a table in ''Parser.java'', below ''operatorExpressio
 
 <code java>
   private static final Operator[] operators = new Operator[] {
-    new Operator(PREFIX,  NOT,        true,   4,  4 ),
-    new Operator(PREFIX,  ENABLED,    false,  4,  15),
-    new Operator(PREFIX,  MINUS,      true,   12, 12),
-    new Operator(INFIX,   IN,         false,  5,  5 ),
-    new Operator(INFIX,   EQUAL,      false,  5,  5 ),
-    new Operator(INFIX,   LESS_THAN,  false,  5,  5 ),
-    new Operator(INFIX,   DOT_DOT,    false,  9,  9 ),
-    new Operator(INFIX,   PLUS,       true,   10, 10),
-    new Operator(INFIX,   MINUS,      true,   11, 11),
-    new Operator(POSTFIX, PRIME,      false,  15, 15),
+    new Operator(Fix.PREFIX,  NOT,        true,   4,  4 ),
+    new Operator(Fix.PREFIX,  ENABLED,    false,  4,  15),
+    new Operator(Fix.PREFIX,  MINUS,      true,   12, 12),
+    new Operator(Fix.INFIX,   IN,         false,  5,  5 ),
+    new Operator(Fix.INFIX,   EQUAL,      false,  5,  5 ),
+    new Operator(Fix.INFIX,   LESS_THAN,  false,  5,  5 ),
+    new Operator(Fix.INFIX,   DOT_DOT,    false,  9,  9 ),
+    new Operator(Fix.INFIX,   PLUS,       true,   10, 10),
+    new Operator(Fix.INFIX,   MINUS,      true,   11, 11),
+    new Operator(Fix.POSTFIX, PRIME,      false,  15, 15),
   };
 </code>
 
@@ -490,7 +460,7 @@ You can see a strong resemblance to the infix operator parsing code given in the
     Operator op;
 
     Expr expr = operatorExpression(prec + 1);
-    while ((op = matchOp(INFIX, prec)) != null) {
+    while ((op = matchOp(Fix.INFIX, prec)) != null) {
       Token operator = previous();
       Expr right = operatorExpression(op.highPrec + 1);
       expr = new Expr.Binary(expr, operator, right);
@@ -509,7 +479,7 @@ If you still don't get it, wait until we have a fully-functional expression pars
 Our code implements precedence ranges, but assumes all infix operators are associative.
 We need to modify the loop to return immediately if the infix operator is not associative:
 <code java [highlight_lines_extra="5"]>
-    while ((op = matchOp(INFIX, prec)) != null) {
+    while ((op = matchOp(Fix.INFIX, prec)) != null) {
       Token operator = previous();
       Expr right = operatorExpression(op.highPrec + 1);
       expr = new Expr.Binary(expr, operator, right);
@@ -527,7 +497,7 @@ Add this snippet near the top of ''operatorExpression()'':
     if (prec == 16) return primary();
 
     Operator op;
-    if ((op = matchOp(PREFIX, prec)) != null) {
+    if ((op = matchOp(Fix.PREFIX, prec)) != null) {
       Token opToken = previous();
       Expr expr = operatorExpression(
                     op.assoc ? op.lowPrec : op.highPrec + 1);
@@ -553,7 +523,7 @@ Add the highlighted code below the ''INFIX'' logic in ''operatorExpression()'':
 <code java [highlight_lines_extra="3,4,5,6,7"]>
     }
 
-    while ((op = matchOp(POSTFIX, prec)) != null) {
+    while ((op = matchOp(Fix.POSTFIX, prec)) != null) {
       Token opToken = previous();
       expr = new Expr.Unary(opToken, expr);
       if (!op.assoc) break;
@@ -665,8 +635,11 @@ In the ''TlaPlus'' class, add the ''error()'' method after ''report()'':
 
 Add the ''ParseError'' class definition at the top of the ''Parser'' class:
 
-<code java [highlight_lines_extra="2"]>
+<code java [highlight_lines_extra="5"]>
 class Parser {
+  private static enum Fix { PREFIX, INFIX, POSTFIX }
+  private static record Operator(Fix fix, TokenType token,
+      boolean assoc, int lowPrec, int highPrec) {}
   private static class ParseError extends RuntimeException {}
 
   private final List<Token> tokens;

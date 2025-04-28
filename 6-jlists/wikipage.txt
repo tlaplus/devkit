@@ -279,7 +279,7 @@ op ==
 </code>
 which should be parsed as ''(A /\ B) = C''.
 The ''='' sign is not to the right of the jlist's vertical alignment, so it terminates that jlist.
-To check this, we need another helper method in ''JListContext'' class called ''isAboveCurrent()'':
+To check this, we need another helper method in the ''JListContext'' class called ''isAboveCurrent()'':
 <code java>
   public boolean isAboveCurrent(Token tok) {
     JListInfo current = stack.peekFirst();

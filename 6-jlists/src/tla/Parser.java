@@ -2,17 +2,22 @@ package tla;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.ArrayDeque;
 
 import static tla.TokenType.*;
-import static tla.Fix.*;
 
 class Parser {
+  private static enum Fix { PREFIX, INFIX, POSTFIX }
+  private static record Operator(Fix fix, TokenType token,
+      boolean assoc, int lowPrec, int highPrec) { }
   private static class ParseError extends RuntimeException {}
+  private static record JListInfo(TokenType type, int column) { }
 
   private final List<Token> tokens;
   private int current = 0;
   private final boolean replMode;
-  private final JListContext jlists = new JListContext();
+  private final Deque<JListInfo> jlists = new ArrayDeque<>();
 
   Parser(List<Token> tokens, boolean replMode) {
     this.tokens = tokens;
@@ -65,21 +70,21 @@ class Parser {
     if (prec == 16) return primary();
 
     Operator op;
-    if ((op = matchOp(PREFIX, prec)) != null) {
+    if ((op = matchOp(Fix.PREFIX, prec)) != null) {
       Token opToken = previous();
       Expr expr = operatorExpression(op.assoc ? op.lowPrec : op.highPrec + 1);
       return new Expr.Unary(opToken, expr);
     }
 
     Expr expr = operatorExpression(prec + 1);
-    while ((op = matchOp(INFIX, prec)) != null) {
+    while ((op = matchOp(Fix.INFIX, prec)) != null) {
       Token operator = previous();
       Expr right = operatorExpression(op.highPrec + 1);
       expr = new Expr.Binary(expr, operator, right);
       if (!op.assoc) return expr;
     }
 
-    while ((op = matchOp(POSTFIX, prec)) != null) {
+    while ((op = matchOp(Fix.POSTFIX, prec)) != null) {
       Token opToken = previous();
       expr = new Expr.Unary(opToken, expr);
       if (!op.assoc) break;
@@ -130,12 +135,12 @@ class Parser {
 
     if (match(AND, OR)) {
       Token op = previous();
-      jlists.startNew(op);
+      jlists.push(new JListInfo(op.type, op.column));
       List<Expr> juncts = new ArrayList<Expr>();
       do {
         juncts.add(expression());
       } while (matchBullet(op.type, op.column));
-      jlists.terminateCurrent();
+      jlists.pop();
       return new Expr.Variadic(op, juncts);
     }
 
@@ -143,18 +148,18 @@ class Parser {
   }
 
   private static final Operator[] operators = new Operator[] {
-    new Operator(PREFIX,  NOT,        true,   4,  4 ),
-    new Operator(PREFIX,  ENABLED,    false,  4,  15),
-    new Operator(PREFIX,  MINUS,      true,   12, 12),
-    new Operator(INFIX,   AND,        true,   3,  3 ),
-    new Operator(INFIX,   OR,         true,   3,  3 ),
-    new Operator(INFIX,   IN,         false,  5,  5 ),
-    new Operator(INFIX,   EQUAL,      false,  5,  5 ),
-    new Operator(INFIX,   LESS_THAN,  false,  5,  5 ),
-    new Operator(INFIX,   DOT_DOT,    false,  9,  9 ),
-    new Operator(INFIX,   PLUS,       true,   10, 10),
-    new Operator(INFIX,   MINUS,      true,   11, 11),
-    new Operator(POSTFIX, PRIME,      false,  15, 15),
+    new Operator(Fix.PREFIX,  NOT,        true,   4,  4 ),
+    new Operator(Fix.PREFIX,  ENABLED,    false,  4,  15),
+    new Operator(Fix.PREFIX,  MINUS,      true,   12, 12),
+    new Operator(Fix.INFIX,   AND,        true,   3,  3 ),
+    new Operator(Fix.INFIX,   OR,         true,   3,  3 ),
+    new Operator(Fix.INFIX,   IN,         false,  5,  5 ),
+    new Operator(Fix.INFIX,   EQUAL,      false,  5,  5 ),
+    new Operator(Fix.INFIX,   LESS_THAN,  false,  5,  5 ),
+    new Operator(Fix.INFIX,   DOT_DOT,    false,  9,  9 ),
+    new Operator(Fix.INFIX,   PLUS,       true,   10, 10),
+    new Operator(Fix.INFIX,   MINUS,      true,   11, 11),
+    new Operator(Fix.POSTFIX, PRIME,      false,  15, 15),
   };
 
   private Parser lookahead() {
@@ -173,7 +178,6 @@ class Parser {
   }
 
   private Operator matchOp(Fix fix, int prec) {
-    if (jlists.isNewBullet(peek())) return null;
     for (Operator op : operators) {
       if (op.fix == fix && op.lowPrec == prec) {
         if (match(op.token)) return op;
@@ -201,8 +205,8 @@ class Parser {
   }
 
   private boolean check(TokenType type) {
-    if (!jlists.isAboveCurrent(peek())) return false;
     if (isAtEnd()) return false;
+    if (!jlists.isEmpty() && peek().column <= jlists.peek().column) return false;
     return peek().type == type;
   }
 
@@ -229,7 +233,7 @@ class Parser {
   }
 
   private void synchronize() {
-    jlists.dump();
+    jlists.clear();
     advance();
 
     while(!isAtEnd()) {

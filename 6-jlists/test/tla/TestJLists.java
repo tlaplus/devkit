@@ -1,6 +1,7 @@
 package tla;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.util.List;
@@ -323,5 +324,62 @@ public class TestJLists {
         """,
         "(\\/ 1 (\\/ (+ 2 (group (\\/ 3 4))) 5) 6)"
     );
+  }
+
+  @Test
+  public void testConjlistFollowedByDisjunct() {
+    checkEqual(
+        """
+          /\\ 1
+          /\\ 2
+          \\/ 3
+        """,
+        "(\\/ (/\\ 1 2) 3)"
+    );
+  }
+
+  @Test
+  public void testDisjlistFollowedByConjunct() {
+    checkEqual(
+        """
+          \\/ 1
+          \\/ 2
+          /\\ 3
+        """,
+        "(/\\ (\\/ 1 2) 3)"
+    );
+  }
+
+  @Test
+  public void testNestedAlternatingJlists() {
+    checkEqual(
+        """
+          /\\  \\/ 1
+              \\/ 2
+          /\\  \\/ 3
+              \\/  /\\ 4
+                  /\\ 5
+          /\\ 6
+        """,
+        "(/\\ (\\/ 1 2) (\\/ 3 (/\\ 4 5)) 6)"
+    );
+  }
+
+  @Test
+  public void testInvalidParentheses() {
+    String input =
+        """
+        op ==
+          /\\ 1
+          /\\ (2
+        )
+          /\\ 3
+        """;
+    Scanner s = new Scanner(input);
+    Parser p = new Parser(s.scanTokens(), false);
+    List<Stmt> statements = p.parse();
+    for (Stmt statement : statements) {
+      assertNull(statement, input);
+    }
   }
 }
