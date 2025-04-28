@@ -83,7 +83,7 @@ class Parser {
 
     if (match(LEFT_BRACE)) {
       Token operator = previous();
-      List<Expr> elements = new ArrayList<Expr>();
+      List<Expr> elements = new ArrayList<>();
       if (RIGHT_BRACE != peek().type) {
         do {
           elements.add(expression());
