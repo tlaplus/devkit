@@ -4,6 +4,8 @@ import java.util.Set;
 import java.util.HashSet;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.io.PrintStream;
 
 class Interpreter implements Expr.Visitor<Object>,
@@ -31,13 +33,16 @@ class Interpreter implements Expr.Visitor<Object>,
   private void execute(Stmt stmt) {
     stmt.accept(this);
   }
-  
+
   Object execute(Expr expr, Environment environment) {
     Environment old = this.environment;
     this.environment = environment;
-    Object result = evaluate(expr);
-    this.environment = old;
-    return result;
+    try {
+      Object result = evaluate(expr);
+      return result;
+    } finally {
+      this.environment = old;
+    }
   }
 
   private Object evaluate(Expr expr) {
@@ -93,30 +98,6 @@ class Interpreter implements Expr.Visitor<Object>,
         return null;
     }
   }
-  
-  @Override
-  public Object visitCallExpr(Expr.Call expr) {
-    Object callee = evaluate(expr.callee);
-
-    List<Object> arguments = new ArrayList<>();
-    for (Expr argument : expr.arguments) { 
-      arguments.add(evaluate(argument));
-    }
-
-    if (!(callee instanceof TlaCallable)) {
-      throw new RuntimeError(expr.paren,
-          "Can only call function and operators.");
-    }
-
-    TlaCallable function = (TlaCallable)callee;
-    if (arguments.size() != function.arity()) {
-      throw new RuntimeError(expr.paren, "Expected " +
-          function.arity() + " arguments but got " +
-          arguments.size() + ".");
-    }
-
-    return function.call(this, arguments);
-  }
 
   @Override
   public Object visitGroupingExpr(Expr.Grouping expr) {
@@ -127,10 +108,86 @@ class Interpreter implements Expr.Visitor<Object>,
   public Object visitLiteralExpr(Expr.Literal expr) {
     return expr.value;
   }
+  
+  @Override
+  public Object visitQuantFnExpr(Expr.QuantFn expr) {
+    Object set = evaluate(expr.set);
+    checkSetOperand(expr.op, set);
+    TlaCallable body = new TlaOperator(expr);
+    switch (expr.op.type) {
+      case ALL_MAP_TO: {
+        Map<Object, Object> function = new HashMap<>();
+        for (Object element : (Set<?>)set) {
+          List<Object> arguments = new ArrayList<>();
+          arguments.add(element);
+          function.put(element, body.call(this, arguments));
+        }
+        return function;
+      } case FOR_ALL: {
+        for (Object element : (Set<?>)set) {
+          List<Object> arguments = new ArrayList<>();
+          arguments.add(element);
+          Object result = body.call(this, arguments);
+          checkBooleanOperand(expr.op, result);
+          if (!(Boolean)result) return false;
+        }
+        return true;
+      } case EXISTS: {
+        for (Object element : (Set<?>)set) {
+          List<Object> arguments = new ArrayList<>();
+          arguments.add(element);
+          Object result = body.call(this, arguments);
+          checkBooleanOperand(expr.op, result);
+          if ((Boolean)result) return true;
+        }
+        return false;
+      } default: {
+        // Unreachable.
+        return null;
+      }
+    }
+  }
+
+  @Override
+  public Object visitFnApplyExpr(Expr.FnApply expr) {
+    Object function = evaluate(expr.fn);
+    checkFunctionOperand(expr.paren, function);
+    Object argument = evaluate(expr.argument);
+    Map<?, ?> map = (Map<?, ?>)function;
+    if (!map.containsKey(argument)) {
+      throw new RuntimeError(expr.paren,
+          "Attempted to apply function to element outside domain.");
+    }
+
+    return map.get(argument);
+  }
 
   @Override
   public Object visitVariableExpr(Expr.Variable expr) {
-    return environment.get(expr.name);
+    Object referent = environment.get(expr.name);
+    
+    if (!(referent instanceof TlaCallable)) {
+      if (!expr.arguments.isEmpty()) {
+        throw new RuntimeError(expr.name,
+            "Attempted to call non-operator identifier.");
+      }
+
+      return referent;
+    }
+    
+    List<Object> arguments = new ArrayList<>();
+    for (Expr argument : expr.arguments) {
+      arguments.add(evaluate(argument));
+    }
+
+    TlaCallable operator = (TlaCallable)referent;
+    if (arguments.size() != operator.arity()) {
+      throw new RuntimeError(expr.name, "Expected " +
+          operator.arity() + " arguments but got " +
+          arguments.size() + ".");
+    }
+
+    return operator.call(this, arguments);
   }
 
   @Override
@@ -222,5 +279,10 @@ class Interpreter implements Expr.Visitor<Object>,
   private void checkSetOperand(Token operator, Object operand) {
     if (operand instanceof Set<?>) return;
     throw new RuntimeError(operator, "Operand must be a set.");
+  }
+  
+  private void checkFunctionOperand(Token operator, Object operand) {
+    if (operand instanceof Map<?,?>) return;
+    throw new RuntimeError(operator, "Operand must be a function.");
   }
 }

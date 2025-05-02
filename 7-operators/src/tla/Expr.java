@@ -5,7 +5,8 @@ import java.util.List;
 abstract class Expr {
   interface Visitor<R> {
     R visitBinaryExpr(Binary expr);
-    R visitCallExpr(Call expr);
+    R visitQuantFnExpr(QuantFn expr);
+    R visitFnApplyExpr(FnApply expr);
     R visitGroupingExpr(Grouping expr);
     R visitLiteralExpr(Literal expr);
     R visitVariableExpr(Variable expr);
@@ -29,21 +30,39 @@ abstract class Expr {
     final Token operator;
     final Expr right;
   }
-  static class Call extends Expr {
-    Call(Expr callee, Token paren, List<Expr> arguments) {
-      this.callee = callee;
-      this.paren = paren;
-      this.arguments = arguments;
+  static class QuantFn extends Expr {
+    QuantFn(Token op, Token param, Expr set, Expr body) {
+      this.op = op;
+      this.param = param;
+      this.set = set;
+      this.body = body;
     }
 
     @Override
     <R> R accept(Visitor<R> visitor) {
-      return visitor.visitCallExpr(this);
+      return visitor.visitQuantFnExpr(this);
     }
 
-    final Expr callee;
+    final Token op;
+    final Token param;
+    final Expr set;
+    final Expr body;
+  }
+  static class FnApply extends Expr {
+    FnApply(Expr fn, Token paren, Expr argument) {
+      this.fn = fn;
+      this.paren = paren;
+      this.argument = argument;
+    }
+
+    @Override
+    <R> R accept(Visitor<R> visitor) {
+      return visitor.visitFnApplyExpr(this);
+    }
+
+    final Expr fn;
     final Token paren;
-    final List<Expr> arguments;
+    final Expr argument;
   }
   static class Grouping extends Expr {
     Grouping(Expr expression) {
@@ -70,8 +89,9 @@ abstract class Expr {
     final Object value;
   }
   static class Variable extends Expr {
-    Variable(Token name) {
+    Variable(Token name, List<Expr> arguments) {
       this.name = name;
+      this.arguments = arguments;
     }
 
     @Override
@@ -80,6 +100,7 @@ abstract class Expr {
     }
 
     final Token name;
+    final List<Expr> arguments;
   }
   static class Unary extends Expr {
     Unary(Token operator, Expr expr) {

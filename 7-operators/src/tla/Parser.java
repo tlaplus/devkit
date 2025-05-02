@@ -77,7 +77,7 @@ class Parser {
   }
 
   private Expr operatorExpression(int prec) {
-    if (prec == 16) return call();
+    if (prec == 16) return apply();
 
     Operator op;
     if ((op = matchOp(Fix.PREFIX, prec)) != null) {
@@ -103,30 +103,13 @@ class Parser {
     return expr;
   }
   
-  private Expr finishCall(Expr callee) {
-    List<Expr> arguments = new ArrayList<>();
-    if (!check(RIGHT_BRACKET)) {
-      do {
-        arguments.add(expression());
-      } while (match(COMMA));
-    }
-
-    Token paren = consume(RIGHT_PAREN,
-                          "Expect ')' after arguments.");
-
-    return new Expr.Call(callee, paren, arguments);
-  }
-  
-  private Expr call() {
+  private Expr apply() {
     Expr expr = primary();
 
     while (match(LEFT_BRACKET)) {
-      List<Expr> arguments = new ArrayList<>();
-      do {
-        arguments.add(expression());
-      } while (match(COMMA));
+      Expr argument = expression();
       consume(RIGHT_BRACKET, "Require ']' to conclude function call");
-      expr = new Expr.Call(expr, previous(), arguments);
+      expr = new Expr.FnApply(expr, previous(), argument);
     }
 
     return expr;
@@ -141,16 +124,15 @@ class Parser {
     }
 
     if (match(IDENTIFIER)) {
-      Expr expr = new Expr.Variable(previous());
+      Token identifier = previous();
+      List<Expr> arguments = new ArrayList<>();
       if (match(LEFT_PAREN)) {
-        List<Expr> arguments = new ArrayList<>();
         do {
           arguments.add(expression());
         } while (match(COMMA));
         consume(RIGHT_PAREN, "Require ')' to conclude operator call");
-        expr = new Expr.Call(expr, previous(), arguments);
       }
-      return expr;
+      return new Expr.Variable(identifier, arguments);
     }
 
     if (match(LEFT_PAREN)) {
@@ -180,6 +162,10 @@ class Parser {
       consume(RIGHT_BRACE, "'}' is required to terminate finite set literal.");
       return new Expr.Variadic(operator, elements);
     }
+    
+    if (match(FOR_ALL, EXISTS, LEFT_BRACKET)) {
+      return quantifiedFunction();
+    }
 
     if (match(AND, OR)) {
       Token op = previous();
@@ -193,6 +179,23 @@ class Parser {
     }
 
     throw error(peek(), "Expect expression.");
+  }
+  
+  private Expr.QuantFn quantifiedFunction() {
+    Token op = previous();
+    Token param = consume(IDENTIFIER, "Identifier required in quantifier.");
+    consume(IN, "'\\in' required in quantifier.");
+    Expr set = expression();
+    if (op.type == LEFT_BRACKET) {
+      op = consume(ALL_MAP_TO, "'|->' required in function constructor.");
+    } else {
+      consume(COLON, "':' required in quantifier.");
+    }
+    Expr expr = expression();
+    if (op.type == ALL_MAP_TO) {
+      consume(RIGHT_BRACKET, "']' required to conclude function constructor.");
+    }
+    return new Expr.QuantFn(op, param, set, expr);
   }
 
   private static final Operator[] operators = new Operator[] {
