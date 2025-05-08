@@ -1,6 +1,5 @@
 package tla;
 
-import java.util.ArrayList;
 import java.util.List;
 
 class TlaOperator implements TlaCallable {
@@ -11,14 +10,6 @@ class TlaOperator implements TlaCallable {
     this.name = declaration.name;
     this.params = declaration.params;
     this.body = declaration.body;
-  }
-
-  TlaOperator(Expr.QuantFn function) {
-    this.name = function.op;
-    List<Token> params = new ArrayList<>();
-    params.add(function.param);
-    this.params = params;
-    this.body = function.body;
   }
 
   @Override

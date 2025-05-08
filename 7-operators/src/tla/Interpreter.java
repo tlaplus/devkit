@@ -108,35 +108,30 @@ class Interpreter implements Expr.Visitor<Object>,
   public Object visitLiteralExpr(Expr.Literal expr) {
     return expr.value;
   }
-  
+
   @Override
   public Object visitQuantFnExpr(Expr.QuantFn expr) {
     Object set = evaluate(expr.set);
     checkSetOperand(expr.op, set);
-    TlaCallable body = new TlaOperator(expr);
+    VarBinder bindings = new VarBinder(expr.params, (Set<?>)set, environment);
     switch (expr.op.type) {
       case ALL_MAP_TO: {
+        Token param = expr.params.get(0);
         Map<Object, Object> function = new HashMap<>();
-        for (Object element : (Set<?>)set) {
-          List<Object> arguments = new ArrayList<>();
-          arguments.add(element);
-          function.put(element, body.call(this, arguments));
+        for (Environment binding : bindings) {
+          function.put(binding.get(param), execute(expr.body, binding));
         }
         return function;
       } case FOR_ALL: {
-        for (Object element : (Set<?>)set) {
-          List<Object> arguments = new ArrayList<>();
-          arguments.add(element);
-          Object result = body.call(this, arguments);
+        for (Environment binding : bindings) {
+          Object result = execute(expr.body, binding);
           checkBooleanOperand(expr.op, result);
           if (!(Boolean)result) return false;
         }
         return true;
       } case EXISTS: {
-        for (Object element : (Set<?>)set) {
-          List<Object> arguments = new ArrayList<>();
-          arguments.add(element);
-          Object result = body.call(this, arguments);
+        for (Environment binding : bindings) {
+          Object result = execute(expr.body, binding);
           checkBooleanOperand(expr.op, result);
           if ((Boolean)result) return true;
         }
@@ -156,7 +151,8 @@ class Interpreter implements Expr.Visitor<Object>,
     Map<?, ?> map = (Map<?, ?>)function;
     if (!map.containsKey(argument)) {
       throw new RuntimeError(expr.paren,
-          "Attempted to apply function to element outside domain.");
+          "Attempted to apply function to element outside domain: "
+          + argument.toString());
     }
 
     return map.get(argument);
@@ -165,7 +161,7 @@ class Interpreter implements Expr.Visitor<Object>,
   @Override
   public Object visitVariableExpr(Expr.Variable expr) {
     Object referent = environment.get(expr.name);
-    
+
     if (!(referent instanceof TlaCallable)) {
       if (!expr.arguments.isEmpty()) {
         throw new RuntimeError(expr.name,
@@ -174,7 +170,7 @@ class Interpreter implements Expr.Visitor<Object>,
 
       return referent;
     }
-    
+
     List<Object> arguments = new ArrayList<>();
     for (Expr argument : expr.arguments) {
       arguments.add(evaluate(argument));
@@ -280,7 +276,7 @@ class Interpreter implements Expr.Visitor<Object>,
     if (operand instanceof Set<?>) return;
     throw new RuntimeError(operator, "Operand must be a set.");
   }
-  
+
   private void checkFunctionOperand(Token operator, Object operand) {
     if (operand instanceof Map<?,?>) return;
     throw new RuntimeError(operator, "Operand must be a function.");

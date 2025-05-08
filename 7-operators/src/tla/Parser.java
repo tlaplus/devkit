@@ -102,7 +102,7 @@ class Parser {
 
     return expr;
   }
-  
+
   private Expr apply() {
     Expr expr = primary();
 
@@ -162,9 +162,29 @@ class Parser {
       consume(RIGHT_BRACE, "'}' is required to terminate finite set literal.");
       return new Expr.Variadic(operator, elements);
     }
-    
-    if (match(FOR_ALL, EXISTS, LEFT_BRACKET)) {
-      return quantifiedFunction();
+
+    if (match(LEFT_BRACKET)) {
+      List<Token> params = new ArrayList<>();
+      params.add(consume(IDENTIFIER, "Identifier required in function constructor."));
+      consume(IN, "'\\in' required in function constructor.");
+      Expr set = expression();
+      Token op = consume(ALL_MAP_TO, "'|->' required in function constructor.");
+      Expr expr = expression();
+      consume(RIGHT_BRACKET, "']' required to conclude function constructor.");
+      return new Expr.QuantFn(op, params, set, expr);
+    }
+
+    if (match(FOR_ALL, EXISTS)) {
+      Token op = previous();
+      List<Token> params = new ArrayList<>();
+      do {
+        params.add(consume(IDENTIFIER, "Identifier required in quantifier."));
+      } while (match(COMMA));
+      consume(IN, "'\\in' required in quantifier.");
+      Expr set = expression();
+      consume(COLON, "':' required in quantifier.");
+      Expr expr = expression();
+      return new Expr.QuantFn(op, params, set, expr);
     }
 
     if (match(AND, OR)) {
@@ -179,23 +199,6 @@ class Parser {
     }
 
     throw error(peek(), "Expect expression.");
-  }
-  
-  private Expr.QuantFn quantifiedFunction() {
-    Token op = previous();
-    Token param = consume(IDENTIFIER, "Identifier required in quantifier.");
-    consume(IN, "'\\in' required in quantifier.");
-    Expr set = expression();
-    if (op.type == LEFT_BRACKET) {
-      op = consume(ALL_MAP_TO, "'|->' required in function constructor.");
-    } else {
-      consume(COLON, "':' required in quantifier.");
-    }
-    Expr expr = expression();
-    if (op.type == ALL_MAP_TO) {
-      consume(RIGHT_BRACKET, "']' required to conclude function constructor.");
-    }
-    return new Expr.QuantFn(op, param, set, expr);
   }
 
   private static final Operator[] operators = new Operator[] {

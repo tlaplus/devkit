@@ -31,9 +31,9 @@ abstract class Expr {
     final Expr right;
   }
   static class QuantFn extends Expr {
-    QuantFn(Token op, Token param, Expr set, Expr body) {
+    QuantFn(Token op, List<Token> params, Expr set, Expr body) {
       this.op = op;
-      this.param = param;
+      this.params = params;
       this.set = set;
       this.body = body;
     }
@@ -44,7 +44,7 @@ abstract class Expr {
     }
 
     final Token op;
-    final Token param;
+    final List<Token> params;
     final Expr set;
     final Expr body;
   }
