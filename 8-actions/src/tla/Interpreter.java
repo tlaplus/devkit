@@ -13,10 +13,11 @@ class Interpreter implements Expr.Visitor<Object>,
   final Environment globals;
   private Environment environment;
   private final PrintStream out;
-  private final State state = new State();
+  private State state = new State();
+  private final Set<State> possibleNext = new HashSet<>();
 
   public Interpreter(PrintStream out, boolean replMode) {
-    this.globals = new Environment(replMode, state);
+    this.globals = new Environment(replMode);
     this.environment = this.globals;
     this.out = out;
   }
@@ -69,7 +70,44 @@ class Interpreter implements Expr.Visitor<Object>,
   @Override
   public Void visitPrintStmt(Stmt.Print stmt) {
     Object value = evaluate(stmt.expression);
-    out.println(stringify(value));
+    if (!(value instanceof Boolean)) {
+      out.println(stringify(value));
+      return null;
+    }
+
+    List<State> nextStates = new ArrayList<State>();
+    boolean satisfies = (Boolean)value;
+    if (satisfies && state.isCompletelyDefined()) nextStates.add(state);
+    possibleNext.remove(state);
+    while (!possibleNext.isEmpty()) {
+      state = possibleNext.iterator().next();
+      satisfies = (boolean)evaluate(stmt.expression);
+      possibleNext.remove(state);
+      if (satisfies && state.isCompletelyDefined()) nextStates.add(state);
+    }
+    
+    if (nextStates.size() == 0) {
+      out.println(stringify(false));
+      out.println("No possible next states.");
+    } else if (nextStates.size() == 1) {
+      out.println(stringify(true));
+      state = nextStates.get(0);
+      state.step();
+    } else {
+      out.println(stringify(true));
+      out.println("Select " + (state.isInitialState() ? "initial" : "next") + " state (number):");
+      for (int i = 0; i < nextStates.size(); i++) {
+        out.println(i + ":");
+        out.println(nextStates.get(i));
+      }
+      out.print("> ");
+      try (java.util.Scanner in = new java.util.Scanner(System.in)) {
+        int selection = in.nextInt();
+        state = nextStates.get(selection);
+      }
+      state.step();
+    }
+
     return null;
   }
 
@@ -92,6 +130,18 @@ class Interpreter implements Expr.Visitor<Object>,
         return set;
       case IN:
         checkSetOperand(expr.operator, right);
+        if ((var = UnboundVariable.as(left)) != null) {
+          if (var.isPrimed() || state.isInitialState()) {
+            State current = state;
+            for (Object element : (Set<?>)right) {
+              state = new State(current);
+              state.bindValue(var, element);
+              left = element;
+              possibleNext.add(state);
+            }
+          }
+        }
+        checkIsDefined(left);
         return ((Set<?>)right).contains(left);
       case MINUS:
         checkNumberOperands(expr.operator, left, right);
@@ -149,12 +199,16 @@ class Interpreter implements Expr.Visitor<Object>,
         }
         return true;
       } case EXISTS: {
+        boolean result = false;
+        State current = state;
         for (Environment binding : bindings) {
-          Object result = execute(expr.body, binding);
-          checkBooleanOperand(expr.op, result);
-          if ((Boolean)result) return true;
+          state = new State(current);
+          Object junctResult = execute(expr.body, binding);
+          checkBooleanOperand(expr.op, junctResult);
+          possibleNext.add(state);
+          result |= (boolean)junctResult;
         }
-        return false;
+        return result;
       } default: {
         // Unreachable.
         return null;
@@ -179,7 +233,7 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object visitVariableExpr(Expr.Variable expr) {
-    Object referent = environment.get(expr.name);
+    Object referent = getValue(expr.name);
 
     if (referent instanceof UnboundVariable) {
       return referent;
@@ -257,7 +311,9 @@ class Interpreter implements Expr.Visitor<Object>,
       case LEFT_BRACE:
         Set<Object> set = new HashSet<Object>();
         for (Expr parameter : expr.parameters) {
-          set.add(evaluate(parameter));
+          Object value = evaluate(parameter);
+          checkIsDefined(value);
+          set.add(value);
         }
         return set;
       case AND:
@@ -268,12 +324,16 @@ class Interpreter implements Expr.Visitor<Object>,
         }
         return true;
       case OR:
+        boolean result = false;
+        State current = state;
         for (Expr disjunct : expr.parameters) {
-          Object result = evaluate(disjunct);
-          checkBooleanOperand(expr.operator, result);
-          if ((boolean)result) return true;
+          state = new State(current);
+          Object junctResult = evaluate(disjunct);
+          checkBooleanOperand(expr.operator, junctResult);
+          possibleNext.add(state);
+          result |= (boolean)junctResult;
         }
-        return false;
+        return result;
       default:
         // Unreachable.
         return null;
@@ -283,7 +343,15 @@ class Interpreter implements Expr.Visitor<Object>,
   private String stringify(Object object) {
     return object.toString();
   }
-  
+
+  private Object getValue(Token name) {
+    if (state.isDeclared(name)) {
+      return state.getValue(name);
+    }
+
+    return environment.get(name);
+  }
+
   private void checkIsDefined(Object... operands) {
     UnboundVariable var;
     for (Object operand : operands) {

@@ -7,18 +7,15 @@ class Environment {
   final Environment enclosing;
   private final boolean allowRedefinition;
   private final Map<String, Object> values = new HashMap<>();
-  private final State state;
 
-  Environment(boolean allowRedefinition, State state) {
+  Environment(boolean allowRedefinition) {
     enclosing = null;
     this.allowRedefinition = allowRedefinition;
-    this.state = state;
   }
 
   Environment(Environment enclosing) {
     this.enclosing = enclosing;
     this.allowRedefinition = enclosing.allowRedefinition;
-    this.state = enclosing.state;
   }
 
   void define(Token name, Object value) {
@@ -30,10 +27,6 @@ class Environment {
   }
   
   Object get(Token name) {
-    if (state.isDeclared(name)) {
-      return state.getValue(name);
-    }
-
     if (values.containsKey(name.lexeme)) {
       return values.get(name.lexeme);
     }
