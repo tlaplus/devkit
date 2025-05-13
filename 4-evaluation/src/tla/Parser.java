@@ -84,7 +84,7 @@ class Parser {
     if (match(LEFT_BRACE)) {
       Token operator = previous();
       List<Expr> elements = new ArrayList<>();
-      if (RIGHT_BRACE != peek().type) {
+      if (!check(RIGHT_BRACE)) {
         do {
           elements.add(expression());
         } while (match(COMMA));
