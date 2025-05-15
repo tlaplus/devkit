@@ -60,9 +60,20 @@ public class TestOperatorEvaluation {
   }
 
   @Test
+  public void testQuantifiedOperator() {
+    assertEquals("false", interpret("op(n, m) == n < m q(n) == \\A x \\in 0 .. n : op(x, n) q(3)"));
+    assertEquals("true", interpret("op(n, m) == n < m q(n) == \\A x \\in 0 .. n : op(x, n + 1) q(3)"));
+  }
+
+  @Test
   public void testParameterizedFunctions() {
     assertEquals("5", interpret("op(n, m) == [x \\in 0 .. n |-> x + m] op(2, 3)[2]"));
     assertEquals("5", interpret("op(n, m) == [x \\in 0 .. n |-> x + m] f(n, m, x) == op(n, m)[x] f(2, 3, 2)"));
     assertEquals("false", interpret("f(n, e) == [x \\in 0 .. n |-> [y \\in {TRUE, FALSE} |-> ~y]][e] f(2, 1)[TRUE]"));
+  }
+
+  @Test
+  public void testFunctionOperator() {
+    assertEquals("4", interpret("f(n) == n + 1 op(n) == [x \\in 0 .. n |-> f(x)] op(3)[3]"));
   }
 }

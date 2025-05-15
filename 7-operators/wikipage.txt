@@ -1,4 +1,165 @@
 ======= Operators & Parameters =======
 
-====== A First Attempt ======
+We now rejoin //Crafting Interpreters// for [[https://craftinginterpreters.com/functions.html|Chapter 10]].
+The chapter is titled //Functions//, but TLA⁺ actually has two related concepts to handle here: functions, and operators.
+It's worth taking some time to conceptually delineate them.
 
+//Functions// in TLA⁺ are what in other languages are called dictionaries, maps, or associative arrays.
+They are //values//, which we'll implement in the interpreter as instances of ''Map<Object, Object>''.
+They have a defined domain, and attempting to apply a function to a value outside of its domain results in a runtime error.
+
+In contrast, TLA⁺ //operators// are more similar to macros: they don't have a defined domain, and the body of a TLA⁺ operator is whatever results from replacing parameter references with whatever expression was provided for them.
+If that replacement process results in a totally nonsensical expression, well, that's the user's fault and we raise a runtime error.
+
+We [[creating:statements|previously]] implemented the ability to directly bind values to identifiers, which in this chapter will be recognized as zero-parameter operators.
+Functions have not yet been defined in any form, but will be later in this tutorial.
+
+====== Section 10.1: Function Calls ======
+
+[[https://craftinginterpreters.com/functions.html#function-calls|Section 10.1]] takes us through adding calling syntax to the parser.
+We have two separate calling syntaxes to support: function application, which use square brackets like ''f[x]'', and operator calls, which use parentheses like ''op(x)''.
+Let's go over function application first.
+
+Similar to the book, we add a new expression type in the ''GenerateAst'' class ''main()'' method, which we'll call ''FnApply'':
+<code java [highlight_lines_extra="3"]>
+    defineAst(outputDir, "Expr", Arrays.asList(
+      "Binary   : Expr left, Token operator, Expr right",
+      "FnApply  : Expr fn, Token bracket, Expr argument",
+      "Grouping : Expr expression",
+</code>
+
+For simplicity we restrict function application to a single parameter.
+While the full TLA⁺ language does support constructing & calling functions with multiple parameters (underneath, bundled into a tuple), this feature is easily replicated by nesting single-parameter functions within functions - which we will support.
+
+To support operator calls, we actually augment our existing ''Expr.Variable'' class with a list of arguments:
+<code java [highlight_lines_extra="6"]>
+    defineAst(outputDir, "Expr", Arrays.asList(
+      "Binary   : Expr left, Token operator, Expr right",
+      "FnApply  : Expr fn, Token bracket, Expr argument",
+      "Grouping : Expr expression",
+      "Literal  : Object value",
+      "Variable : Token name, List<Expr> arguments",
+      "Unary    : Token operator, Expr expr",
+</code>
+
+While functions in TLA⁺ are values that can be passed around and constructed, operators have to be directly mentioned by name.
+That is why ''FnApply'' has an ''Expr'' instance to derive the function to apply, while operators use ''Variable'' which has a ''Token'' instance to record the operator name.
+Operators can accept multiple arguments.
+
+To parse function application we need to splice a method into our recursive descent precedence chain.
+At the top of ''operatorExpression()'' in the ''Parser'' class, replace the call to ''primary()'' with a call to ''call()'':
+<code java [highlight_lines_extra="2"]>
+  private Expr operatorExpression(int prec) {
+    if (prec == 16) return call();
+
+    Operator op;
+</code>
+
+Then, define the ''call()'' method similar to the book (differences highlighted):
+<code java [highlight_lines_extra="4,5,6,7,8"]>
+  private Expr call() {
+    Expr expr = primary();
+
+    while (match(LEFT_BRACKET)) {
+      Expr argument = expression();
+      consume(RIGHT_BRACKET, "Require ']' to conclude function call");
+      expr = new Expr.FnApply(expr, previous(), argument);
+    }
+
+    return expr;
+  }
+
+</code>
+
+Our parsing task is simpler so we don't need a separate ''finishCall()'' method as suggested by the book.
+You'll note that parsing function application is strikingly similar to parsing associative postfix operators.
+
+For operator calling, we augment our handling of identifiers in ''primary()'':
+<code java [highlight_lines_extra="5,6,7,8,9,10,11,12,13,14"]>
+      return new Expr.Literal(previous().literal);
+    }
+
+    if (match(IDENTIFIER)) {
+      Token identifier = previous();
+      List<Expr> arguments = new ArrayList<>();
+      if (match(LEFT_PAREN)) {
+        do {
+          arguments.add(expression());
+        } while (match(COMMA));
+        consume(RIGHT_PAREN, "Require ')' to conclude operator call");
+      }
+
+      return new Expr.Variable(identifier, arguments);
+    }
+
+    if (match(LEFT_PAREN)) {
+</code>
+
+This ''do''/''while'' loop is very similar to our existing set literal parsing code for handling comma-separated expressions, so it should be familiar to you.
+
+===== Subsection 10.1.2: Interpreting function calls =====
+
+In [[https://craftinginterpreters.com/functions.html#interpreting-function-calls|this section]] we learn how to interpret our shiny new call syntax.
+
+First let's implement the ''Interpreter'' class visitor method for ''Expr.FnApply'':
+<code java>
+  @Override
+  public Object visitFnApplyExpr(Expr.FnApply expr) {
+    Object function = evaluate(expr.fn);
+    checkFunctionOperand(expr.bracket, function);
+    Object argument = evaluate(expr.argument);
+    Map<?, ?> map = (Map<?, ?>)function;
+    if (!map.containsKey(argument)) {
+      throw new RuntimeError(expr.bracket,
+          "Cannot apply function to element outside domain: "
+          + argument.toString());
+    }
+
+    return map.get(argument);
+  }
+</code>
+
+First we get the function itself, by calling ''evaluate()'' on ''expr.fn''.
+Then we validate that we got an actual function (a ''Map<Object, Object>''), and - if so - evaluate the argument and then return the value of the function applied to that argument.
+This requires another validation helper, ''checkFunctionOperand()'' - put it down with the rest of the validation helpers:
+<code java>
+  private void checkFunctionOperand(Token operator, Object operand) {
+    if (operand instanceof Map<?,?>) return;
+    throw new RuntimeError(operator, "Operand must be a function.");
+  }
+</code>
+
+Now we can apply functions, although we can't yet define them.
+Next up is operators.
+Here we completely rewrite our ''visitVariableExpr()'' method in the ''Interpreter'' class to look nearly identical to the ''visitCallExpr()'' method from the book (differences highlighted):
+<code java [highlight_lines_extra="2,3,10,11"]>
+  @Override
+  public Object visitVariableExpr(Expr.Variable expr) {
+    Object callee = environment.get(expr.name);
+
+    List<Object> arguments = new ArrayList<>();
+    for (Expr argument : expr.arguments) {
+      arguments.add(evaluate(argument));
+    }
+
+    TlaCallable operator = (TlaCallable)callee;
+    return operator.call(this, arguments);
+  }
+</code>
+
+We write our own version of the ''LoxCallable'' interface from the book, which we'll call ''TlaCallable'':
+<code java>
+package tla;
+
+import java.util.List;
+
+interface TlaCallable {
+  Object call(Interpreter interpreter, List<Object> arguments);
+}
+</code>
+
+===== Subsection 10.1.3: Call type errors =====
+
+Our ''visitFnApply()'' already has all the runtime validation it needs, but ''visitVariableExpr()'' could use some more work.
+Fortunately for us, ''callee'' is guaranteed to always resolve to a ''TlaCallable'' instance (or will be, once we get around to modifying ''visitOpDefStmt()''.
+Similar to the book, we want to validate the provided number of arguments against operator arity.

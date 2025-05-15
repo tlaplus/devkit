@@ -1,5 +1,6 @@
 package tla;
 
+import java.util.ArrayList;
 import java.util.List;
 
 class TlaOperator implements TlaCallable {
@@ -10,6 +11,12 @@ class TlaOperator implements TlaCallable {
     this.name = declaration.name;
     this.params = declaration.params;
     this.body = declaration.body;
+  }
+  
+  TlaOperator(Expr expression) {
+    name = null;
+    params = new ArrayList<>();
+    body = expression;
   }
 
   @Override

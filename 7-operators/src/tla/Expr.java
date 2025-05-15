@@ -49,9 +49,9 @@ abstract class Expr {
     final Expr body;
   }
   static class FnApply extends Expr {
-    FnApply(Expr fn, Token paren, Expr argument) {
+    FnApply(Expr fn, Token bracket, Expr argument) {
       this.fn = fn;
-      this.paren = paren;
+      this.bracket = bracket;
       this.argument = argument;
     }
 
@@ -61,7 +61,7 @@ abstract class Expr {
     }
 
     final Expr fn;
-    final Token paren;
+    final Token bracket;
     final Expr argument;
   }
   static class Grouping extends Expr {

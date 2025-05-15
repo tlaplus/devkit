@@ -130,12 +130,13 @@ class Interpreter implements Expr.Visitor<Object>,
         }
         return true;
       } case EXISTS: {
+        boolean result = false;
         for (Environment binding : bindings) {
-          Object result = execute(expr.body, binding);
-          checkBooleanOperand(expr.op, result);
-          if ((Boolean)result) return true;
+          Object junctResult = execute(expr.body, binding);
+          checkBooleanOperand(expr.op, junctResult);
+          result |= (Boolean)junctResult;
         }
-        return false;
+        return result;
       } default: {
         // Unreachable.
         return null;
@@ -146,12 +147,12 @@ class Interpreter implements Expr.Visitor<Object>,
   @Override
   public Object visitFnApplyExpr(Expr.FnApply expr) {
     Object function = evaluate(expr.fn);
-    checkFunctionOperand(expr.paren, function);
+    checkFunctionOperand(expr.bracket, function);
     Object argument = evaluate(expr.argument);
     Map<?, ?> map = (Map<?, ?>)function;
     if (!map.containsKey(argument)) {
-      throw new RuntimeError(expr.paren,
-          "Attempted to apply function to element outside domain: "
+      throw new RuntimeError(expr.bracket,
+          "Cannot apply function to element outside domain: "
           + argument.toString());
     }
 
@@ -160,28 +161,30 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object visitVariableExpr(Expr.Variable expr) {
-    Object referent = environment.get(expr.name);
+    Object callee = environment.get(expr.name);
 
-    if (!(referent instanceof TlaCallable)) {
+    /*
+    if (!(callee instanceof TlaCallable)) {
       if (!expr.arguments.isEmpty()) {
         throw new RuntimeError(expr.name,
-            "Attempted to call non-operator identifier.");
+            "Cannot give arguments to non-operator identifier.");
       }
 
-      return referent;
-    }
+      return callee;
+    }*/
 
     List<Object> arguments = new ArrayList<>();
     for (Expr argument : expr.arguments) {
-      arguments.add(evaluate(argument));
+      arguments.add(new TlaOperator(argument));
     }
 
-    TlaCallable operator = (TlaCallable)referent;
+    TlaCallable operator = (TlaCallable)callee;
+    /*
     if (arguments.size() != operator.arity()) {
       throw new RuntimeError(expr.name, "Expected " +
           operator.arity() + " arguments but got " +
           arguments.size() + ".");
-    }
+    }*/
 
     return operator.call(this, arguments);
   }
