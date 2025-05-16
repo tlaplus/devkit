@@ -146,24 +146,23 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object visitFnApplyExpr(Expr.FnApply expr) {
-    Object function = evaluate(expr.fn);
-    checkFunctionOperand(expr.bracket, function);
+    Object callee = evaluate(expr.fn);
+    checkFunctionOperand(expr.bracket, callee);
     Object argument = evaluate(expr.argument);
-    Map<?, ?> map = (Map<?, ?>)function;
-    if (!map.containsKey(argument)) {
+    Map<?, ?> function = (Map<?, ?>)callee;
+    if (!function.containsKey(argument)) {
       throw new RuntimeError(expr.bracket,
           "Cannot apply function to element outside domain: "
           + argument.toString());
     }
 
-    return map.get(argument);
+    return function.get(argument);
   }
 
   @Override
   public Object visitVariableExpr(Expr.Variable expr) {
     Object callee = environment.get(expr.name);
 
-    /*
     if (!(callee instanceof TlaCallable)) {
       if (!expr.arguments.isEmpty()) {
         throw new RuntimeError(expr.name,
@@ -171,20 +170,19 @@ class Interpreter implements Expr.Visitor<Object>,
       }
 
       return callee;
-    }*/
+    }
 
     List<Object> arguments = new ArrayList<>();
     for (Expr argument : expr.arguments) {
-      arguments.add(new TlaOperator(argument));
+      arguments.add(evaluate(argument));
     }
 
     TlaCallable operator = (TlaCallable)callee;
-    /*
     if (arguments.size() != operator.arity()) {
       throw new RuntimeError(expr.name, "Expected " +
           operator.arity() + " arguments but got " +
           arguments.size() + ".");
-    }*/
+    }
 
     return operator.call(this, arguments);
   }
