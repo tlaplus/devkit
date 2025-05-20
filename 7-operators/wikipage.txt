@@ -115,8 +115,8 @@ First let's implement the ''Interpreter'' class visitor method for ''Expr.FnAppl
 
 Now we can apply functions, although we can't yet define them.
 Next up is operators.
-Here we completely rewrite our ''visitVariableExpr()'' method in the ''Interpreter'' class to look nearly identical to the ''visitCallExpr()'' method from the book (differences highlighted):
-<code java [highlight_lines_extra="2,3,10,11"]>
+Here we completely rewrite our ''visitVariableExpr()'' method in the ''Interpreter'' class to resemble the ''visitCallExpr()'' method from the book:
+<code java>
   @Override
   public Object visitVariableExpr(Expr.Variable expr) {
     Object callee = environment.get(expr.name);
@@ -141,6 +141,7 @@ interface TlaCallable {
   Object call(Interpreter interpreter, List<Object> arguments);
 }
 </code>
+We can now call operators, although cannot yet define operators to call!
 
 ===== Subsection 10.1.3: Call type errors =====
 
@@ -190,6 +191,7 @@ It is simply an identifier bound to a concrete value in the current ''environmen
 
     List<Object> arguments = new ArrayList<>();
 </code>
+This duality of identifiers either being operators to be evaluated or already-bound values is a bit confusing at times, but we can handle it.
 If the user tries to provide arguments to one of these concrete values then we should raise an error:
 <code java [highlight_lines_extra="2,3,4,5"]>
     if (!(callee instanceof TlaCallable)) {
@@ -202,7 +204,9 @@ If the user tries to provide arguments to one of these concrete values then we s
     }
 </code>
 
-If ''callee'' //is// an operator, we need to check arity - that the number of arguments provided is as expected:
+===== Subsection 10.1.4: Checking arity =====
+
+If ''callee'' //is// an operator, we need to [[https://craftinginterpreters.com/functions.html#checking-arity|check arity]] - that the number of arguments provided is as expected:
 <code java [highlight_lines_extra="2,3,4,5,6"]>
     TlaCallable operator = (TlaCallable)callee;
     if (arguments.size() != operator.arity()) {
@@ -219,4 +223,402 @@ interface TlaCallable {
   int arity();
   Object call(Interpreter interpreter, List<Object> arguments);
 </code>
+
+For functions, we don't need to check arity because the single-argument restriction is enforced at the parser level.
+
+====== Section 10.2: Native Functions ======
+
+In [[https://craftinginterpreters.com/functions.html#native-functions|Section 10.2]] we learn how to implement primitive/native functions.
+We've already implemented all our native TLA⁺ functions in the //[[creating:evaluation|Evaluating Constant TLA⁺ Expressions]]// chapter, but we will follow along to add a crucial field to the ''Interpreter'' class: a global environment.
+Due to the ''replMode'' parameter we have to put the initialization logic in the constructor (new code highlighted):
+<code java [highlight_lines_extra="3,8,9"]>
+class Interpreter implements Expr.Visitor<Object>,
+                             Stmt.Visitor<Void> {
+  final Environment globals;
+  private Environment environment;
+  private final PrintStream out;
+
+  public Interpreter(PrintStream out, boolean replMode) {
+    this.globals = new Environment(replMode);
+    this.environment = this.globals;
+    this.out = out;
+  }
+</code>
+
+Note that the ''globals'' field has package visibility, not class visibility.
+The use of this field will become clear when implementing the ''TlaCallable.call()'' interface method.
+
+====== Section 10.3: Function Declarations ======
+
+We can call functions & operators, now let's [[https://craftinginterpreters.com/functions.html#function-declarations|define them]]!
+Operators take less work so they come first.
+In the ''Parser'' class, we have our existing ''isAtOpDefStart()'' and ''operatorDefinition()'' methods which we will now extend to accept parameters.
+We want to parse operator definitions like ''op(x, y, z) == expr'' and also ''op == expr''.
+''op() == expr'' is invalid syntax in TLA⁺.
+We will use the now-familiar ''do''/''while'' method of consuming one or more comma-separated values.
+Recall that ''isAtOpDefStart()'' is a lookahead method to determine whether the upcoming token sequence is an operator definition, while ''operatorDefinition()'' actually parses that same token sequence into an AST node.
+<code java [highlight_lines_extra="3,4,5,6,7,8"]>
+  private boolean isAtOpDefStart() {
+    if (!match(IDENTIFIER)) return false;
+    if (match(LEFT_PAREN)) {
+      do {
+        if (!match(IDENTIFIER)) return false;
+      } while (match(COMMA));
+      if (!match(RIGHT_PAREN)) return false;
+    }
+
+    return match(EQUAL_EQUAL);
+  }
+</code>
+<code java [highlight_lines_extra="3,4,5,6,7,8,9,12"]>
+  private Stmt operatorDefinition() {
+    Token name = consume(IDENTIFIER, "Name required for operator definition.");
+    List<Token> params = new ArrayList<>();
+    if (match(LEFT_PAREN)) {
+      do {
+        params.add(consume(IDENTIFIER, "Identifier required as operator parameter."));
+      } while (match(COMMA));
+      consume(RIGHT_PAREN, "')' required to terminate operator parameters.");
+    }
+
+    consume(EQUAL_EQUAL, "'==' required for operator definition.");
+    return new Stmt.OpDef(name, params, expression());
+  }
+</code>
+
+Our changes to ''operatorDefinition()'' require modifying the definition of ''Stmt.OpDef'' in the ''GenerateAst'' class to accept parameters:
+<code java [highlight_lines_extra="3"]>
+    defineAst(outputDir, "Stmt", Arrays.asList(
+      "Print    : Expr expression",
+      "OpDef    : Token name, List<Token> params, Expr body"
+    ));
+</code>
+
+We can now parse operators with parameters!
+On to functions.
+This requires defining a new expression type in the ''GenerateAST'' class:
+<code java [highlight_lines_extra="3"]>
+    defineAst(outputDir, "Expr", Arrays.asList(
+      "Binary   : Expr left, Token operator, Expr right",
+      "QuantFn  : Token op, List<Token> params, Expr set, Expr body",
+      "FnApply  : Expr fn, Token bracket, Expr argument",
+</code>
+
+This looks a bit abstract.
+What does ''QuantFn'' mean?
+And why do we allow multiple parameters when our functions only take one?
+This is because we'll be bundling multiple closely-related language constructs into this single AST node type: function constructors, universal quantifiers, and existential quantifiers.
+
+In TLA⁺, functions are constructed with the ''|->'' operator.
+So you can write ''[x \in 0 .. 2 |-> x + 1]'' to define a function mapping the values 0, 1, and 2 to 1, 2, and 3 respectively.
+TLA⁺ also has very useful universal & existential quantification syntax.
+You can write ''\A x \in 0 .. 2 : x < 3'' to assert that all elements of the set ''{0, 1, 2}'' are less than three, or ''\E x, y  \in 0 .. 2 : x + y = 4'' to assert that there are two elements of the set ''{0, 1, 2}'' that together sum to four.
+We can see the commonality between these; they all have:
+  - A token identifying the operator (''|->'', ''\A'', or ''\E'')
+  - A set to draw elements from (''0 .. 2'')
+  - Some number of identifiers to which to bind values from the set (''x'', ''y'')
+  - An expression body in which the identifiers can be used
+So we can contain all of them in the ''QuantFn'' expression node, which means something like "quantifier function".
+
+Here's how we parse the function constructor syntax.
+Add this to the ''primary()'' method in the ''Parser'' class, below the finite set literal code:
+<code java>
+    if (match(LEFT_BRACKET)) {
+      List<Token> params = new ArrayList<>();
+      params.add(consume(IDENTIFIER, "Identifier required in function constructor."));
+      consume(IN, "'\\in' required in function constructor.");
+      Expr set = expression();
+      Token op = consume(ALL_MAP_TO, "'|->' required in function constructor.");
+      Expr expr = expression();
+      consume(RIGHT_BRACKET, "']' required to conclude function constructor.");
+      return new Expr.QuantFn(op, params, set, expr);
+    }
+</code>
+While the ''Expr.QuantFn'' constructor accepts a list of parameters, we only parse one.
+
+The parser code for universal & existential quantification looks similar, but we allow multiple parameters; put this in ''primary()'' just below the function constructor parsing logic:
+<code java>
+    if (match(FOR_ALL, EXISTS)) {
+      Token op = previous();
+      List<Token> params = new ArrayList<>();
+      do {
+        params.add(consume(IDENTIFIER, "Identifier required in quantifier."));
+      } while (match(COMMA));
+      consume(IN, "'\\in' required in quantifier.");
+      Expr set = expression();
+      consume(COLON, "':' required in quantifier.");
+      Expr expr = expression();
+      return new Expr.QuantFn(op, params, set, expr);
+    }
+</code>
+
+And that concludes function parsing!
+We can now define both operators and functions with parameters; on to evaluation.
+
+====== Section 10.4: Function Objects ======
+
+In [[https://craftinginterpreters.com/functions.html#function-objects|Section 10.4]] we write a class implementing the ''TlaCallable'' interface and hook our function & operator definitions up in the interpreter.
+Create a new file called ''TlaOperator.java'':
+<code java>
+package tla;
+
+import java.util.List;
+
+class TlaOperator implements TlaCallable {
+  private final Stmt.OpDef declaration;
+  TlaOperator(Stmt.OpDef declaration) {
+    this.declaration = declaration;
+  }
+}
+</code>
+
+The implementation of the ''call()'' method is exactly as defined in the book:
+<code java>
+  @Override
+  public Object call(Interpreter interpreter,
+                     List<Object> arguments) {
+    Environment environment = new Environment(interpreter.globals);
+    for (int i = 0; i < declaration.params.size(); i++) {
+      environment.define(declaration.params.get(i).lexeme,
+          arguments.get(i));
+    }
+
+    interpreter.executeBlock(declaration.body, environment);
+    return null;
+  }
+</code>
+Here we see the usage of ''interpreter.globals''; we define the argument values within a new ''Environment'' instance, but the parent of that ''Environment'' is the root global instance instead of the current instance.
+This is so nested operator calls do not propagate their argument values to the nested callee.
+
+This method calls a nonexistent ''executeBlock()'' method which we will define in ''Interpreter'':
+<code java>
+  Object executeBlock(Expr expr, Environment environment) {
+    Environment previous = this.environment;
+    try {
+      this.environment = environment;
+      return evaluate(expr);
+    } finally {
+      this.environment = previous;
+    }
+  }
+</code>
+In the book, ''executeBlock()'' was defined back in [[https://craftinginterpreters.com/statements-and-state.html#block-syntax-and-semantics|Chapter 8]] and looked quite a bit different.
+Since TLA⁺ is not an imperative language with code blocks in the traditional sense, we define ''executeBlock()'' over expressions instead of lists of statements.
+Wrapping the evaluation in a ''try''/''finally'' ensures that if a runtime exception is thrown our environment is not left in an invalid state.
+
+Back in ''TlaOperator'', we still need to implement the ''arity()'' interface method:
+<code java>
+  @Override
+  public int arity() {
+    return declaration.params.size();
+  }
+</code>
+
+For ease of use we'll also override ''toString()'':
+<code java>
+  @Override
+  public String toString() {
+    return "<fn " + declaration.name.lexeme + ">";
+  }
+</code>
+
+There is only one more thing to do and then parameterized operators will be fully functional (operational?): modify ''visitOpDefStmt()'' in ''Interpreter'' so that it defines new ''TlaOperator'' instances instead of evaluating the statement body directly:
+<code java [highlight_lines_extra="3,4"]>
+  @Override
+  public Void visitOpDefStmt(Stmt.OpDef stmt) {
+    TlaOperator op = new TlaOperator(stmt);
+    environment.define(stmt.name, op);
+    return null;
+  }
+</code>
+
+And that takes care of operators!
+Now to handle functions.
+We still need to implement our ''visitQuantFnExpr()'' method in the ''Interpreter''; similar to other operator evaluation methods like ''visitBinaryExpr()'' we evaluate what we can (here, the set to be quantified over) then branch on the operator type:
+<code java>
+  @Override
+  public Object visitQuantFnExpr(Expr.QuantFn expr) {
+    Object set = evaluate(expr.set);
+    checkSetOperand(expr.op, set);
+    switch (expr.op.type) {
+      case ALL_MAP_TO: {
+
+      } case FOR_ALL: {
+
+      } case EXISTS: {
+
+      } default: {
+        // Unreachable.
+        return null;
+      }
+    }
+  }
+</code>
+
+Thinking about it, the code to implement these operators is fairly tricky.
+We want to generate a series of bindings of set elements to identifiers.
+Let's fill out the ''FOR_ALL'' case to get a sense of how we want this to look; note that like our conjunction implementation in the previous chapter, universal quantification is short-circuiting and returns false as soon as it encounters a counterexample to the body predicate:
+<code java [highlight_lines_extra="2,3,4,5,6,7"]>
+      } case FOR_ALL: {
+        for (Environment binding : bindings) {
+          Object result = executeBlock(expr.body, binding);
+          checkBooleanOperand(expr.op, result);
+          if (!(Boolean)result) return false;
+        }
+        return true;
+      } case EXISTS: {
+</code>
+This is nice, concise code.
+We iterate over a series of bindings - in the form of ''Environment'' instances - which enumerate all possible bindings of set values to identifiers.
+But what is ''bindings''?
+This is one of the more algorithmically tricky parts of this entire tutorial series, but it is also very fun!
+We are going to encapsulate the binding generation logic in a new class file, ''BindingGenerator.java'', where the class implements both the ''Iterator<Environment>'' and ''Iterable<Environment>'' standard Java interfaces:
+<code java>
+package tla;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+
+class BindingGenerator implements Iterator<Environment>,
+                                  Iterable<Environment> {
+  private final List<Token> vars;
+  private final List<Object> set;
+  private final Environment parent;
+
+  BindingGenerator(List<Token> vars, Set<?> set, Environment parent) {
+    this.vars = vars;
+    this.set = new ArrayList<>(set);
+    this.parent = parent;
+  }
+
+  @Override
+  public Iterator<Environment> iterator() {
+    return this;
+  }
+}
+</code>
+Implementing the ''Iterator<>'' and ''Iterable<>'' interfaces allows us to treat ''BindingGenerator'' instances as things that can be iterated over in Java's nice [[https://docs.oracle.com/javase/8/docs/technotes/guides/language/foreach.html|for-each loop]] syntax.
+So that's what ''bindings'' is!
+A ''BindingGenerator'' instance!
+
+Before getting too far into the weeds with the ''BindingGenerator'' iterator algorithm, let's just assume it works and fill out the rest of ''visitQuantFnExpr()''.
+Construct a ''BindingGenerator'' instance atop the ''switch'' statement:
+<code java [highlight_lines_extra="4"]>
+  public Object visitQuantFnExpr(Expr.QuantFn expr) {
+    Object set = evaluate(expr.set);
+    checkSetOperand(expr.op, set);
+    BindingGenerator bindings = new BindingGenerator(expr.params, (Set<?>)set, environment);
+    switch (expr.op.type) {
+</code>
+One important thing to note is that unlike in ''TlaOperator'', we give ''BindingGenerator'' the //current// environment instead of the root global environment; this is because if we are evaluating an ''Expr.QuantFn'' instance inside an operator, the body expression should be able to access definitions from the operator's environment, like:
+<code haskell>
+op(x) == \A y \in 0 .. 2 : y < x 
+</code>
+Here's how we implement the ''EXISTS'' case; unlike universal quantification, existential quantification is not short-circuiting in TLA⁺ (for reasons that will become clear in the next chapter):
+<code java [highlight_lines_extra="2,3,4,5,6,7,8"]>
+      } case EXISTS: {
+        boolean result = false;
+        for (Environment binding : bindings) {
+          Object junctResult = executeBlock(expr.body, binding);
+          checkBooleanOperand(expr.op, junctResult);
+          result |= (Boolean)junctResult;
+        }
+        return result;
+      } default: {
+</code>
+Finally, here's how we implement the ''ALL_MAP_TO'' case; we want to construct a ''Map<Object, Object>'' instance recording each value the single parameter is mapped to:
+<code java [highlight_lines_extra="2,3,4,5,6,7"]>
+      case ALL_MAP_TO: {
+        Token param = expr.params.get(0);
+        Map<Object, Object> function = new HashMap<>();
+        for (Environment binding : bindings) {
+          function.put(binding.get(param), executeBlock(expr.body, binding));
+        }
+        return function;
+      } case FOR_ALL: {
+</code>
+
+Now that we've finished all that, let's get to the real difficult part: implementing an enumeration algorithm in ''BindingGenerator''.
+A moment of consideration is in order.
+If you had to bind a set of variables to every combination of values from a set, how would you do it?
+To computer scientists, the connection between enumerating every possible combination of values and incrementing numbers in an arbitrary base is readily made.
+For example, imagine you had a set of three values ''{a, b, c}'' that you wanted to bind to two identifiers ''x'' and ''y''.
+This is isomorphic to iterating through all possible values of a two-digit number in base three.
+Confusing? Here's a table illustrating the connection:
+^ Number (base 3) ^ As set elements ^ x (0th-significant digit) ^ y (1st-significant digit) ^
+| 00              | aa              | a                         | a                         |
+| 01              | ab              | b                         | a                         |
+| 02              | ac              | c                         | a                         |
+| 10              | ba              | a                         | b                         |
+| 11              | bb              | b                         | b                         |
+| 12              | bc              | c                         | b                         |
+| 20              | ca              | a                         | c                         |
+| 21              | cb              | b                         | c                         |
+| 22              | cc              | c                         | c                         |
+
+As you can see, by counting up through all two-digit base-three numbers, we generate every possible binding of ''{a, b, c}'' to ''x'' and ''y''!
+Each identifier is assigned a particular digit in the number, and their value in a binding is given by that digit's value in the enumeration.
+So, for a set ''S'' and list of identifiers ''I'' it suffices to enumerate all ''|I|''-digit numbers of base ''|S|'', where ''| .. |'' means the number of elements in the collection.
+
+We're almost there, but not quite; Java doesn't have the built-in ability to iterate through numbers in a particular base.
+We will need to increment a regular ''int'' counter and //convert// it into the desired base, then extract the value of each digit.
+Actually the well-known [[https://en.wikipedia.org/wiki/Positional_notation#Base_conversion|base conversion]] algorithm lets us do both at once!
+It is quite elegant; given a number ''n'' and a desired base ''|S|'', the value of the least-significant digit can be found by calculating ''n % |S|'' (''%'' meaning mod, giving the division remainder).
+Then, assign ''n' = n / |S|'' (using integer division) and repeat for as many digits as desired (after some finite number of iterations, the digits all become zero).
+Confused? Here's how it looks as a table for converting the enumeration value 6 to a binding from our previous base 3 example:
+^ Iteration ^ ''n'' ^ ''n % 3'' ^ ''n / 3'' ^
+| 0         | 6     | 0         | 2         |
+| 1         | 2     | 2         | 0         |
+
+Note that the value of ''n / 3'' always becomes the value of ''n'' in the next row.
+Reading the ''n % 3'' column from bottom to top we see "20", which is 6 in base 3.
+Now associate each value in the set with a fixed value between ''0'' and ''|S| - 1''.
+In our case, 0 maps to ''a'', 1 maps to ''b'', and 2 maps to ''c''.
+The base 3 digit significance is identified by the iteration value.
+The value of ''n % 3'' in the zeroeth iteration gives the value of the 0th-significant digit, from which we derive the value of ''x'' - here, 0 which maps to ''a''.
+The value of ''n % 3'' in the first iteration gives the value of the 1st-significant digit, from which we derive the value of ''y'' - here, 2 which maps to ''c''.
+So, enumeration value 6 binds value ''a'' to identifier ''x'' and value ''c'' to identifier ''y''.
+You should consult the original table and try some other values to convince yourself that our algorithm successfully calculates the binding.
+
+Now to implement it!
+First, add another field to the ''BindingGenerator'' class:
+<code java [highlight_lines_extra="6"]>
+class BindingGenerator implements Iterator<Environment>,
+                                  Iterable<Environment> {
+  private final List<Token> vars;
+  private final List<Object> set;
+  private final Environment parent;
+  private int enumerationIndex = 0;
+</code>
+
+Then, implement ''hasNext()''.
+This is required by the ''Iterator<>'' interface and returns true if there are additional un-enumerated combinations.
+In our case, we test that ''enumerationIndex'' is strictly less than ''|S|^|I|'':
+<code java>
+  @Override
+  public boolean hasNext() {
+    return enumerationIndex < Math.pow(set.size(), vars.size());
+  }
+</code>
+
+Now for the main event.
+Here's the strikingly simple code implementing the change-of-base algorithm in the ''next()'' method required by the ''Iterator<>'' interface:
+<code java>
+  @Override
+  public Environment next() {
+    int current = enumerationIndex++;
+    Environment bindings = new Environment(parent);
+    for (Token var : vars) {
+      bindings.define(var, set.get(current % set.size()));
+      current /= set.size();
+    }
+
+    return bindings;
+  }
+</code>
+
+And we're done!
+You can now run your interpreter and enjoy the full power of functions & operators with parameters, along with the new universal & existential quantification expressions!
 

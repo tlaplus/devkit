@@ -50,6 +50,7 @@ class Parser {
       } while (match(COMMA));
       if (!match(RIGHT_PAREN)) return false;
     }
+
     return match(EQUAL_EQUAL);
   }
 
@@ -62,6 +63,7 @@ class Parser {
       } while (match(COMMA));
       consume(RIGHT_PAREN, "')' required to terminate operator parameters.");
     }
+
     consume(EQUAL_EQUAL, "'==' required for operator definition.");
     return new Stmt.OpDef(name, params, expression());
   }
