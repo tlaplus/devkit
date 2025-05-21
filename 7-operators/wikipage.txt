@@ -1,4 +1,4 @@
-======= Operators & Parameters =======
+======= Functions, Operators, and Parameters =======
 
 We now rejoin //Crafting Interpreters// for [[https://craftinginterpreters.com/functions.html|Chapter 10]].
 The chapter is titled //Functions//, but TLA⁺ actually has two related concepts to handle here: functions, and operators.
@@ -540,13 +540,24 @@ Finally, here's how we implement the ''ALL_MAP_TO'' case; we want to construct a
       } case FOR_ALL: {
 </code>
 
+====== Set Enumeration ======
+
 Now that we've finished all that, let's get to the real difficult part: implementing an enumeration algorithm in ''BindingGenerator''.
 A moment of consideration is in order.
 If you had to bind a set of variables to every combination of values from a set, how would you do it?
 To computer scientists, the connection between enumerating every possible combination of values and incrementing numbers in an arbitrary base is readily made.
 For example, imagine you had a set of three values ''{a, b, c}'' that you wanted to bind to two identifiers ''x'' and ''y''.
 This is isomorphic to iterating through all possible values of a two-digit number in base three.
-Confusing? Here's a table illustrating the connection:
+The number of digits corresponds to the number of variables to bind, and the base corresponds to the number of elements in the set.
+
+This is confusing, but we will walk through it step by step.
+First we must assign an arbitrary order to the set so we can map single digits in base three to an element of the set:
+^ Digit ^ Element ^
+| 0     | a       |
+| 1     | b       |
+| 2     | c       |
+
+Using that mapping, here's a table showing how counting up through all two-digit base three numbers decomposes into binding all possible combinations of values to ''x'' and ''y'':
 ^ Number (base 3) ^ As set elements ^ x (0th-significant digit) ^ y (1st-significant digit) ^
 | 00              | aa              | a                         | a                         |
 | 01              | ab              | b                         | a                         |
@@ -558,15 +569,14 @@ Confusing? Here's a table illustrating the connection:
 | 21              | cb              | b                         | c                         |
 | 22              | cc              | c                         | c                         |
 
-As you can see, by counting up through all two-digit base-three numbers, we generate every possible binding of ''{a, b, c}'' to ''x'' and ''y''!
+As you can see, we generated every possible binding of ''{a, b, c}'' to ''x'' and ''y''!
 Each identifier is assigned a particular digit in the number, and their value in a binding is given by that digit's value in the enumeration.
-So, for a set ''S'' and list of identifiers ''I'' it suffices to enumerate all ''|I|''-digit numbers of base ''|S|'', where ''| .. |'' means the number of elements in the collection.
 
 We're almost there, but not quite; Java doesn't have the built-in ability to iterate through numbers in a particular base.
 We will need to increment a regular ''int'' counter and //convert// it into the desired base, then extract the value of each digit.
 Actually the well-known [[https://en.wikipedia.org/wiki/Positional_notation#Base_conversion|base conversion]] algorithm lets us do both at once!
-It is quite elegant; given a number ''n'' and a desired base ''|S|'', the value of the least-significant digit can be found by calculating ''n % |S|'' (''%'' meaning mod, giving the division remainder).
-Then, assign ''n' = n / |S|'' (using integer division) and repeat for as many digits as desired (after some finite number of iterations, the digits all become zero).
+It is quite elegant; given a number ''n'' and a desired base ''b'', the value of the least-significant digit can be found by calculating ''n % b'' (''%'' meaning mod, giving the division remainder).
+Then, assign ''n' = n / b'' (using integer division, so throw away the remainder) and repeat for as many digits as desired.
 Confused? Here's how it looks as a table for converting the enumeration value 6 to a binding from our previous base 3 example:
 ^ Iteration ^ ''n'' ^ ''n % 3'' ^ ''n / 3'' ^
 | 0         | 6     | 0         | 2         |
@@ -574,15 +584,16 @@ Confused? Here's how it looks as a table for converting the enumeration value 6 
 
 Note that the value of ''n / 3'' always becomes the value of ''n'' in the next row.
 Reading the ''n % 3'' column from bottom to top we see "20", which is 6 in base 3.
-Now associate each value in the set with a fixed value between ''0'' and ''|S| - 1''.
-In our case, 0 maps to ''a'', 1 maps to ''b'', and 2 maps to ''c''.
-The base 3 digit significance is identified by the iteration value.
-The value of ''n % 3'' in the zeroeth iteration gives the value of the 0th-significant digit, from which we derive the value of ''x'' - here, 0 which maps to ''a''.
-The value of ''n % 3'' in the first iteration gives the value of the 1st-significant digit, from which we derive the value of ''y'' - here, 2 which maps to ''c''.
-So, enumeration value 6 binds value ''a'' to identifier ''x'' and value ''c'' to identifier ''y''.
-You should consult the original table and try some other values to convince yourself that our algorithm successfully calculates the binding.
+Consulting our tables, we see "20" should map to ''ca''.
+''x'' gets the 0th (least significant) digit, so it should get ''a''.
+''y'' gets the 1st-significant digit, so it should get ''c''.
 
-Now to implement it!
+The iteration number actually corresponds to digit significance.
+So, in iteration 0, ''x'' should get the value of the ''n % 3'' column, which we see is 0 and thus ''a'' as expected.
+In iteration 1, ''y'' should get the value of the ''n % 3'' column, which we see is 2 and thus ''c'' as expected.
+If this is still too abstract, try some other values to convince yourself that our algorithm successfully calculates the binding!
+
+Now to implement it.
 First, add another field to the ''BindingGenerator'' class:
 <code java [highlight_lines_extra="6"]>
 class BindingGenerator implements Iterator<Environment>,
@@ -595,7 +606,8 @@ class BindingGenerator implements Iterator<Environment>,
 
 Then, implement ''hasNext()''.
 This is required by the ''Iterator<>'' interface and returns true if there are additional un-enumerated combinations.
-In our case, we test that ''enumerationIndex'' is strictly less than ''|S|^|I|'':
+In our case, we test that ''enumerationIndex'' is strictly less than the number of elements in the set raised to the power of the number of identifiers.
+For ''n'' digits in base ''b'', there are ''bⁿ'' possible values to iterate through.
 <code java>
   @Override
   public boolean hasNext() {
@@ -619,10 +631,13 @@ Here's the strikingly simple code implementing the change-of-base algorithm in t
   }
 </code>
 
+Note that ''enumerationIndex++'' retrieves the current value of ''enumerationIndex'' to store in ''current'' and then increments the value of ''enumerationIndex'' itself.
+A nice little terse code trick.
+
 And we're done!
 You can now run your interpreter and enjoy the full power of functions & operators with parameters, along with the new universal & existential quantification expressions!
 See the current expected state of your source code [[https://github.com/tlaplus/devkit/tree/main/7-operators|here]].
-On to the next chapter: [[creating:actions|Variables & Actions]]!
+On to the next chapter: [[creating:actions|Variables, States, and Actions]]!
 
 ====== Challenges ======
 

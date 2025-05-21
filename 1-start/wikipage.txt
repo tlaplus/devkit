@@ -26,8 +26,8 @@ And, if you reach the edge of those capabilities - well, you're well-placed to e
   - [[creating:evaluation|Evaluating Constant TLA⁺ Expressions]]
   - [[creating:statements|Handling TLA⁺ Statements]]
   - [[creating:jlists|Conjunction & Disjunction Lists]]
-  - [[creating:operators|Operators & Parameters]]
-  - [[creating:actions|Variables & Actions]]
+  - [[creating:operators|Functions, Operators, and Parameters]]
+  - [[creating:actions|Variables, States, and Actions]]
   - [[creating:safety|Model-Checking Safety Properties]]
 
 ===== Overview =====
