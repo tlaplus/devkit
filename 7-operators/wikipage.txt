@@ -100,8 +100,18 @@ This ''do''/''while'' loop is very similar to our existing set literal parsing c
 ===== Subsection 10.1.2: Interpreting function calls =====
 
 In [[https://craftinginterpreters.com/functions.html#interpreting-function-calls|this section]] we learn how to interpret our shiny new call syntax.
+First, add some imports to the top of ''Interpreter.java'':
+<code java [highlight_lines_extra="3,5,6"]>
+import java.util.Set;
+import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.io.PrintStream;
+</code>
 
-First let's implement the ''Interpreter'' class visitor method for ''Expr.FnApply'':
+Implement the ''Interpreter'' class visitor method for ''Expr.FnApply'':
 <code java>
   @Override
   public Object visitFnApplyExpr(Expr.FnApply expr) {
