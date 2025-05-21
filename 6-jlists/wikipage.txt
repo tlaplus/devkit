@@ -279,7 +279,7 @@ Then add the disjunction list logic right below that:
         for (Expr disjunct : expr.parameters) {
           Object junctResult = evaluate(disjunct);
           checkBooleanOperand(expr.operator, junctResult);
-          result |= (Boolean)junctResult;
+          result |= (boolean)junctResult;
         }
         return result;
       default:

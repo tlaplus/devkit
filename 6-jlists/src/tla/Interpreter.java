@@ -155,7 +155,7 @@ class Interpreter implements Expr.Visitor<Object>,
         for (Expr disjunct : expr.parameters) {
           Object junctResult = evaluate(disjunct);
           checkBooleanOperand(expr.operator, junctResult);
-          result |= (Boolean)junctResult;
+          result |= (boolean)junctResult;
         }
         return result;
       default:

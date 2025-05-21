@@ -533,7 +533,7 @@ Here's how we implement the ''EXISTS'' case; unlike universal quantification, ex
         for (Environment binding : bindings) {
           Object junctResult = executeBlock(expr.body, binding);
           checkBooleanOperand(expr.op, junctResult);
-          result |= (Boolean)junctResult;
+          result |= (boolean)junctResult;
         }
         return result;
       } default: {

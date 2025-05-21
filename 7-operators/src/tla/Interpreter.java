@@ -133,7 +133,7 @@ class Interpreter implements Expr.Visitor<Object>,
         for (Environment binding : bindings) {
           Object junctResult = executeBlock(expr.body, binding);
           checkBooleanOperand(expr.op, junctResult);
-          result |= (Boolean)junctResult;
+          result |= (boolean)junctResult;
         }
         return result;
       } default: {
@@ -243,7 +243,7 @@ class Interpreter implements Expr.Visitor<Object>,
         for (Expr disjunct : expr.parameters) {
           Object junctResult = evaluate(disjunct);
           checkBooleanOperand(expr.operator, junctResult);
-          result |= (Boolean)junctResult;
+          result |= (boolean)junctResult;
         }
         return result;
       default:

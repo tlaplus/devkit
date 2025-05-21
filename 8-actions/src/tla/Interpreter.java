@@ -36,14 +36,13 @@ class Interpreter implements Expr.Visitor<Object>,
     stmt.accept(this);
   }
 
-  Object execute(Expr expr, Environment environment) {
-    Environment old = this.environment;
-    this.environment = environment;
+  Object executeBlock(Expr expr, Environment environment) {
+    Environment previous = this.environment;
     try {
-      Object result = evaluate(expr);
-      return result;
+      this.environment = environment;
+      return evaluate(expr);
     } finally {
-      this.environment = old;
+      this.environment = previous;
     }
   }
 
@@ -182,18 +181,18 @@ class Interpreter implements Expr.Visitor<Object>,
   public Object visitQuantFnExpr(Expr.QuantFn expr) {
     Object set = evaluate(expr.set);
     checkSetOperand(expr.op, set);
-    VarBinder bindings = new VarBinder(expr.params, (Set<?>)set, environment);
+    BindingGenerator bindings = new BindingGenerator(expr.params, (Set<?>)set, environment);
     switch (expr.op.type) {
       case ALL_MAP_TO: {
         Token param = expr.params.get(0);
         Map<Object, Object> function = new HashMap<>();
         for (Environment binding : bindings) {
-          function.put(binding.get(param), execute(expr.body, binding));
+          function.put(binding.get(param), executeBlock(expr.body, binding));
         }
         return function;
       } case FOR_ALL: {
         for (Environment binding : bindings) {
-          Object result = execute(expr.body, binding);
+          Object result = executeBlock(expr.body, binding);
           checkBooleanOperand(expr.op, result);
           if (!(Boolean)result) return false;
         }
@@ -203,7 +202,7 @@ class Interpreter implements Expr.Visitor<Object>,
         State current = state;
         for (Environment binding : bindings) {
           state = new State(current);
-          Object junctResult = execute(expr.body, binding);
+          Object junctResult = executeBlock(expr.body, binding);
           checkBooleanOperand(expr.op, junctResult);
           possibleNext.add(state);
           result |= (boolean)junctResult;

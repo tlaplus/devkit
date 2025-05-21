@@ -27,10 +27,11 @@ class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
     if (expr.value == null) return "nil";
     return expr.value.toString();
   }
-  
+
   @Override
   public String visitQuantFnExpr(Expr.QuantFn expr) {
-    return parenthesize(expr.op.lexeme, expr.set, expr.body);
+    String params = " " + expr.params.stream().map(t -> t.lexeme).collect(Collectors.joining(" "));
+    return parenthesize(expr.op.lexeme + params, expr.set, expr.body);
   }
 
   @Override
@@ -63,9 +64,15 @@ class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
 
   @Override
   public String visitOpDefStmt(Stmt.OpDef stmt) {
-    return parenthesize(stmt.name.lexeme, stmt.body);
+    String params =
+        stmt.params.isEmpty() ? "" : " " +
+        stmt.params.stream().map(t -> t.lexeme).collect(Collectors.joining(" "));
+    return parenthesize(
+        stmt.name.lexeme + params,
+        stmt.body
+    );
   }
-  
+
   @Override
   public String visitVarDeclStmt(Stmt.VarDecl stmt) {
     return parenthesize(
@@ -74,7 +81,7 @@ class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
             .map(t -> t.lexeme)
             .collect(Collectors.joining(" ")));
   }
-  
+
   @Override
   public String visitPrintStmt(Stmt.Print stmt) {
     return parenthesize("print", stmt.expression);
