@@ -252,8 +252,9 @@ Only a handful of people in the world possess this knowledge, and now you are am
 ====== Evaluation ======
 
 Now that we can parse jlists, let's interpret them.
-Similar to the logical operators covered in the book, jlists short-circuit.
-This means juncts are evaluated in order and, if a conjunct is false or a disjunct is true, evaluation stops and immediately returns false or true respectively.
+Similar to the logical operators covered in the book, conjunction lists short-circuit.
+That means conjuncts are evaluated in order and, if a single conjunct is false, evaluation immediately stops and returns false.
+In an odd contrast, disjunction lists do //not// short-circuit; this is because they are used to express nondeterminism, as you will learn several chapters from now.
 
 Add conjunction list evaluation logic to ''visitVariadicExpr()'' in the ''Interpreter'' class, below the set constructor logic:
 <code java [highlight_lines_extra="2,3,4,5,6,7,8"]>
@@ -271,15 +272,16 @@ Add conjunction list evaluation logic to ''visitVariadicExpr()'' in the ''Interp
 </code>
 
 Then add the disjunction list logic right below that:
-<code java [highlight_lines_extra="2,3,4,5,6,7,8"]>
+<code java [highlight_lines_extra="2,3,4,5,6,7,8,9"]>
         return true;
       case OR:
+        boolean result = false;
         for (Expr disjunct : expr.parameters) {
-          Object result = evaluate(disjunct);
-          checkBooleanOperand(expr.operator, result);
-          if ((boolean)result) return true;
+          Object junctResult = evaluate(disjunct);
+          checkBooleanOperand(expr.operator, junctResult);
+          result |= (Boolean)junctResult;
         }
-        return false;
+        return result;
       default:
         // Unreachable.
         return null;

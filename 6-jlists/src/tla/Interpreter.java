@@ -151,12 +151,13 @@ class Interpreter implements Expr.Visitor<Object>,
         }
         return true;
       case OR:
+        boolean result = false;
         for (Expr disjunct : expr.parameters) {
-          Object result = evaluate(disjunct);
-          checkBooleanOperand(expr.operator, result);
-          if ((boolean)result) return true;
+          Object junctResult = evaluate(disjunct);
+          checkBooleanOperand(expr.operator, junctResult);
+          result |= (Boolean)junctResult;
         }
-        return false;
+        return result;
       default:
         // Unreachable.
         return null;
