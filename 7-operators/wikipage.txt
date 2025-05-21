@@ -621,4 +621,15 @@ Here's the strikingly simple code implementing the change-of-base algorithm in t
 
 And we're done!
 You can now run your interpreter and enjoy the full power of functions & operators with parameters, along with the new universal & existential quantification expressions!
+See the current expected state of your source code [[https://github.com/tlaplus/devkit/tree/main/7-operators|here]].
+On to the next chapter: [[creating:actions|Variables & Actions]]!
+
+====== Challenges ======
+
+  - In the full TLA⁺ language, quantified functions can be even more complicated; for example, you can write ''\A x, y \in 0 .. 2, z \in 0 .. 5 : P(x, y, z)''. Modify the definition of ''Expr.QuantFn'' and your parsing code to handle this syntax.
+  - Modify the change-of-base algorithm to handle enumerating multiple sets of varying cardinality, as required to interpret the expressions parsed in the first challenge.
+  - Our enumeration algorithm is a "depth-first" enumeration: all elements of one set will be enumerated before enumerating a second element of any of the other sets. Come up with an enumeration algorithm that enumerates sets in breadth-first order instead, so the enumeration progresses evenly for each set.
+  - Often, sets in TLA⁺ models are very large. Instead of immediately evaluating sets constructed with the ''..'' infix operator and holding them in memory, write a class that lazily generates set elements as requested. Integrate this lazy evaluation with the breadth-first binding enumeration from the previous challenge.
+
+[[creating:jlists|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:actions|Next Page >]]
 

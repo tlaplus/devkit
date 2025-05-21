@@ -1,6 +1,6 @@
 ## Overview
 
-This directory contains files relevant to the tutorial [Conjunction & Disjunction Lists](https://docs.tlapl.us/creating:jlists).
+This directory contains files relevant to the tutorial [Operators & Parameters](https://docs.tlapl.us/creating:operators).
 You can see the expected state of the source code after the tutorial in the [src](src) directory.
 Unit tests (not covered in the tutorial) are in the [test](test) directory.
 
