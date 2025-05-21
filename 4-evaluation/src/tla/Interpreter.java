@@ -136,11 +136,6 @@ class Interpreter implements Expr.Visitor<Object> {
     throw new RuntimeError(operator, "Operand must be a boolean.");
   }
 
-  private void checkBooleanOperands(Token operator, Object left, Object right) {
-    if (left instanceof Boolean && right instanceof Boolean) return;
-    throw new RuntimeError(operator, "Operands must be booleans.");
-  }
-
   private void checkSetOperand(Token operator, Object operand) {
     if (operand instanceof Set<?>) return;
     throw new RuntimeError(operator, "Operand must be a set.");
