@@ -9,9 +9,9 @@ class State {
   private Map<String, Object> nextState = new HashMap<>();
   private boolean isInitialState = true;
   private boolean isPrimed = false;
-  
+
   State() { }
-  
+
   State(State other) {
     this.variables = new HashMap<>(other.variables);
     this.currentState = new HashMap<>(other.currentState);
@@ -45,19 +45,24 @@ class State {
     Map<String, Object> state = state(var.isPrimed());
     state.put(var.name().lexeme, value);
   }
-  
+
   Object getValue(Token name) {
     return state(isPrimed).get(name.lexeme);
   }
- 
+
   boolean isCompletelyDefined() {
     Map<String, Object> binding = isInitialState ? currentState : nextState;
-    return binding
-        .values()
-        .stream()
+    return !binding.isEmpty() && binding.values().stream()
         .noneMatch(v -> v instanceof UnboundVariable);
   }
-  
+
+  void reset() {
+    Map<String, Object> binding = isInitialState ? currentState : nextState;
+    for (Map.Entry<String, Token> var : variables.entrySet()) {
+      binding.put(var.getKey(), new UnboundVariable(var.getValue(), !isInitialState));
+    }
+  }
+
   void prime(Token op) {
     if (isPrimed) {
       throw new RuntimeError(op,
@@ -65,19 +70,19 @@ class State {
     }
     isPrimed = true;
   }
-  
+
   void unPrime() {
     isPrimed = false;
   }
-  
+
   boolean isPrimed() {
     return isPrimed;
   }
-  
+
   boolean isInitialState() {
     return isInitialState;
   }
-  
+
   void step() {
     if (isInitialState) {
       isInitialState = false;
@@ -93,7 +98,7 @@ class State {
   private Map<String, Object> state(boolean isPrimed) {
     return isPrimed ? nextState : currentState;
   }
-  
+
   @Override
   public String toString() {
     return isInitialState ?

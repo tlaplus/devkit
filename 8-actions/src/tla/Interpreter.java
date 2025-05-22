@@ -35,6 +35,30 @@ class Interpreter implements Expr.Visitor<Object>,
   private void execute(Stmt stmt) {
     stmt.accept(this);
   }
+  
+  List<State> getNextStates(Stmt.OpDef action, State current) {
+    if (!action.params.isEmpty()) {
+      throw new RuntimeError(action.name,
+          "Cannot use parameterized operator as top-level action.");
+    }
+
+    Set<State> nextStates = new HashSet<>();
+    try {
+      possibleNext.add(current);
+      while (!possibleNext.isEmpty()) {
+        state = possibleNext.iterator().next();
+        Object satisfies = evaluate(action.body);
+        checkBooleanOperand(action.name, satisfies);
+        if ((boolean)satisfies && state.isCompletelyDefined()) nextStates.add(state);
+        possibleNext.remove(state);
+      }
+    } finally {
+      possibleNext.clear();
+      state.reset();
+    }
+    
+    return new ArrayList<>(nextStates);
+  }
 
   Object executeBlock(Expr expr, Environment environment) {
     Environment previous = this.environment;
@@ -68,28 +92,24 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Void visitPrintStmt(Stmt.Print stmt) {
-    Object value = evaluate(stmt.expression);
-    if (!(value instanceof Boolean)) {
-      out.println(stringify(value));
-      return null;
+    try {
+      Object value = evaluate(stmt.expression);
+      if (!(value instanceof Boolean) || !state.isCompletelyDefined()) {
+        out.println(stringify(value));
+        return null;
+      }
+    } finally {
+      state.reset();
     }
 
-    List<State> nextStates = new ArrayList<State>();
-    boolean satisfies = (Boolean)value;
-    if (satisfies && state.isCompletelyDefined()) nextStates.add(state);
-    possibleNext.remove(state);
-    while (!possibleNext.isEmpty()) {
-      state = possibleNext.iterator().next();
-      satisfies = (boolean)evaluate(stmt.expression);
-      possibleNext.remove(state);
-      if (satisfies && state.isCompletelyDefined()) nextStates.add(state);
-    }
+    Stmt.OpDef action = new Stmt.OpDef(stmt.location, new ArrayList<>(), stmt.expression);
+    List<State> nextStates = getNextStates(action, state);
     
     if (nextStates.size() == 0) {
       out.println(stringify(false));
-      out.println("No possible next states.");
     } else if (nextStates.size() == 1) {
       out.println(stringify(true));
+      out.println(state.toString());
       state = nextStates.get(0);
       state.step();
     } else {
@@ -104,6 +124,7 @@ class Interpreter implements Expr.Visitor<Object>,
         int selection = in.nextInt();
         state = nextStates.get(selection);
       }
+      out.println(stringify(state.toString()));
       state.step();
     }
 

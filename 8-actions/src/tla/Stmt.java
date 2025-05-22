@@ -9,7 +9,8 @@ abstract class Stmt {
     R visitVarDeclStmt(VarDecl stmt);
   }
   static class Print extends Stmt {
-    Print(Expr expression) {
+    Print(Token location, Expr expression) {
+      this.location = location;
       this.expression = expression;
     }
 
@@ -18,6 +19,7 @@ abstract class Stmt {
       return visitor.visitPrintStmt(this);
     }
 
+    final Token location;
     final Expr expression;
   }
   static class OpDef extends Stmt {

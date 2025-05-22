@@ -74,7 +74,7 @@ class Parser {
   }
 
   private Stmt statement() {
-    if (replMode) return new Stmt.Print(expression());
+    if (replMode) return new Stmt.Print(peek(), expression());
 
     throw error(peek(), "Expected statement.");
   }
