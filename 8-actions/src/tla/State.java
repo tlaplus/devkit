@@ -22,8 +22,7 @@ class State {
 
   void declareVariable(Token name) {
     if (variables.containsKey(name.lexeme)) {
-      throw new RuntimeError(name,
-          "Re-declared state variable.");
+      throw new RuntimeError(name, "Redeclared state variable.");
     }
 
     variables.put(name.lexeme, name);

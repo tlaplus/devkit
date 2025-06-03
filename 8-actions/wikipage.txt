@@ -1,2 +1,107 @@
-======= Variables, States, & Actions =======
+======= Variables, States, and Actions =======
 
+Up to now everything we've done would be at home in any other ordinary programming language.
+However, TLA⁺ is not an ordinary language - it isn't even a programming language!
+TLA⁺ specifications are not programs.
+Properly speaking, a TLA⁺ specification is a predicate over an infinite sequence of states, where states are an assignment of values to variables.
+The closest analogue it has to executing a program is to enumerate the set of all unique reachable states, over which state traces occur.
+The focus of this chapter is thus to introduce states and how to transition between them using actions.
+
+Every model-checkable TLA⁺ specification contains variables.
+These variables are different from the identifiers associated with operators in past chapters.
+The variables constitute a static set of identifiers associated with values in each system state.
+TLA⁺ also has actions, which are expressions containing the prime operator.
+The prime operator is used to specify the value of variables in the *next* state.
+For example:
+<code haskell>
+VARIABLE x
+Action ==
+  /\ x = 0
+  /\ x' = x + 1
+</code>
+This spec declares a single variable, ''x'', and a single action.
+The action is only enabled for states where ''x'' has value ''0'', and generates a new state where ''x'' has value ''x + 1'', or ''1''.
+
+It's worth taking a moment here to think about what actions actually mean.
+Actions are **predicates**, meaning logical expressions evaluating to true or false.
+Strictly speaking actions don't "generate" new states, or "assign" values to variables; actions are true or false of a pair of states, called the current & next states.
+This is the actual semantic meaning of a TLA⁺ action: a predicate which is satisfied (or not) by a pair of arbitrary states pulled from the mathematical ether.
+However, here at the implementation level we don't have the luxury of being able to identify next states by checking an infinite number of arbitrary states pulled from the mathematical ether.
+We have to be smart, and pull clues about next state values directly from the action itself.
+What this means is that we only support certain types of expressions incorporating primed variables, so we restrict ourselves to only model-checking TLA⁺ specs written in a particular idiom.
+
+======= Variables and Priming =======
+Let's start by supporting a simple operation on primed variables, expressions of the form ''x' = expr''.
+There is a fair bit of groundwork necessary to reach that point.
+
+====== Variable Declarations ======
+First off we have to add support for variable declarations; these are top-level syntactic constructs that look like ''VARIABLES x, y, z''.
+Create a new statement type for them in the ''GenerateAst'' class:
+<code java [highlight_lines_extra="2"]>
+    defineAst(outputDir, "Stmt", Arrays.asList(
+      "VarDecl  : List<Token> names",
+      "Print    : Token location, Expr expression",
+      "OpDef    : Token name, List<Token> params, Expr body"
+    ));
+</code>
+Then use the old ''do''/''while'' trick to parse comma-separated variable names in the ''declaration()'' method of the ''Parser'' class:
+<code java [highlight_lines_extra="4,5,6,7,8,9,10"]>
+  private Stmt declaration() {
+    try {
+      if (lookahead().isAtOpDefStart()) return operatorDefinition();
+      if (match(VARIABLES)) {
+        List<Token> names = new ArrayList<>();
+        do {
+          names.add(consume(IDENTIFIER, "Require variable name."));
+        } while (match(COMMA));
+        return new Stmt.VarDecl(names);
+      }
+
+      return statement();
+</code>
+
+Before we can define a ''Stmt.VarDecl'' visitor, we need to come up with a way to manage variables & states.
+It's simplest to copy the ''Environment'' approach and record the current state as a field in the ''Interpreter'' class:
+<code java [highlight_lines_extra="6"]>
+class Interpreter implements Expr.Visitor<Object>,
+                             Stmt.Visitor<Void> {
+  final Environment globals;
+  private Environment environment;
+  private final PrintStream out;
+  private State state = new State();
+</code>
+
+This requires a new class!
+Create a file called ''State.java''; for now, this just supports the ability to declare variables:
+<code java>
+package tla;
+
+import java.util.HashMap;
+import java.util.Map;
+
+class State {
+  private Map<String, Token> variables = new HashMap<>();
+
+  void declareVariable(Token name) {
+    if (variables.containsKey(name.lexeme)) {
+      throw new RuntimeError(name, "Redeclared state variable.");
+    }
+
+    variables.put(name.lexeme, name);
+  }
+}
+</code>
+
+That's enough to implement ''visitVarDeclStmt()'' in the ''Interpreter'' class:
+<code java>
+  @Override
+  public Void visitVarDeclStmt(Stmt.VarDecl stmt) {
+    for (Token name : stmt.names) {
+      state.declareVariable(name);
+    }
+
+    return null;
+  }
+</code>
+
+====== Variable Values ======
