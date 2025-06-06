@@ -76,13 +76,10 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Void visitOpDefStmt(Stmt.OpDef stmt) {
-    if (state.isDeclared(stmt.name)) {
-      throw new RuntimeError(stmt.name, "State variable redeclared as operator.");
-    }
-    
-    for (Token name : stmt.params) {
-      if (state.isDeclared(name)) {
-        throw new RuntimeError(name, "State variable redeclared as operator parameter.");
+    checkNotDefined(stmt.params);
+    for (Token param : stmt.params) {
+      if (param.lexeme.equals(stmt.name.lexeme)) {
+        throw new RuntimeError(param, "Identifier already in use.");
       }
     }
 
@@ -214,6 +211,7 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object visitQuantFnExpr(Expr.QuantFn expr) {
+    checkNotDefined(expr.params);
     Object set = evaluate(expr.set);
     checkSetOperand(expr.op, set);
     BindingGenerator bindings = new BindingGenerator(expr.params, (Set<?>)set, environment);
@@ -391,6 +389,22 @@ class Interpreter implements Expr.Visitor<Object>,
     for (Object operand : operands) {
       if ((var = UnboundVariable.as(operand)) != null) {
         throw new RuntimeError(var.name(), "Use of unbound variable.");
+      }
+    }
+  }
+
+  private void checkNotDefined(List<Token> names) {
+    for (Token name : names) {
+      if (environment.isDefined(name)) {
+        throw new RuntimeError(name, "Identifier already in use.");
+      }
+    }
+
+    for (int i = 0; i < names.size() - 1; i++) {
+      for (int j = i + 1; j < names.size(); j++) {
+        if (names.get(i).lexeme.equals(names.get(j).lexeme)) {
+          throw new RuntimeError(names.get(i), "Identifier used twice in same list.");
+        }
       }
     }
   }
