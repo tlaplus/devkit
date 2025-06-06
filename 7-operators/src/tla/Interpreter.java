@@ -50,6 +50,13 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Void visitOpDefStmt(Stmt.OpDef stmt) {
+    checkNotDefined(stmt.params);
+    for (Token param : stmt.params) {
+      if (param.lexeme.equals(stmt.name.lexeme)) {
+        throw new RuntimeError(param, "Identifier already in use.");
+      }
+    }
+
     TlaOperator op = new TlaOperator(stmt);
     environment.define(stmt.name, op);
     return null;
@@ -110,6 +117,7 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object visitQuantFnExpr(Expr.QuantFn expr) {
+    checkNotDefined(expr.params);
     Object set = evaluate(expr.set);
     checkSetOperand(expr.op, set);
     BindingGenerator bindings = new BindingGenerator(expr.params, (Set<?>)set, environment);
@@ -254,6 +262,22 @@ class Interpreter implements Expr.Visitor<Object>,
 
   private String stringify(Object object) {
     return object.toString();
+  }
+
+  private void checkNotDefined(List<Token> names) {
+    for (Token name : names) {
+      if (environment.isDefined(name)) {
+        throw new RuntimeError(name, "Identifier already in use.");
+      }
+    }
+
+    for (int i = 0; i < names.size() - 1; i++) {
+      for (int j = i + 1; j < names.size(); j++) {
+        if (names.get(i).lexeme.equals(names.get(j).lexeme)) {
+          throw new RuntimeError(names.get(i), "Identifier used twice in same list.");
+        }
+      }
+    }
   }
 
   private void checkNumberOperand(Token operator, Object operand) {

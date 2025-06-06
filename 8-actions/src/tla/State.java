@@ -20,8 +20,12 @@ class State {
     this.isPrimed = other.isPrimed;
   }
 
+  boolean isDeclared(Token name) {
+    return variables.containsKey(name.lexeme);
+  }
+
   void declareVariable(Token name) {
-    if (variables.containsKey(name.lexeme)) {
+    if (isDeclared(name)) {
       throw new RuntimeError(name, "Redeclared state variable.");
     }
 
@@ -29,10 +33,6 @@ class State {
     UnboundVariable var = new UnboundVariable(name, false);
     currentState.put(name.lexeme, var);
     nextState.put(name.lexeme, var.prime());
-  }
-
-  boolean isDeclared(Token name) {
-    return variables.containsKey(name.lexeme);
   }
 
   void bindValue(UnboundVariable var, Object value) {

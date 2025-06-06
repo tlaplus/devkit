@@ -35,7 +35,7 @@ class Interpreter implements Expr.Visitor<Object>,
   private void execute(Stmt stmt) {
     stmt.accept(this);
   }
-  
+
   List<State> getNextStates(Stmt.OpDef action, State current) {
     if (!action.params.isEmpty()) {
       throw new RuntimeError(action.name,
@@ -56,7 +56,7 @@ class Interpreter implements Expr.Visitor<Object>,
       possibleNext.clear();
       state.reset();
     }
-    
+
     return new ArrayList<>(nextStates);
   }
 
@@ -76,6 +76,16 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Void visitOpDefStmt(Stmt.OpDef stmt) {
+    if (state.isDeclared(stmt.name)) {
+      throw new RuntimeError(stmt.name, "State variable redeclared as operator.");
+    }
+    
+    for (Token name : stmt.params) {
+      if (state.isDeclared(name)) {
+        throw new RuntimeError(name, "State variable redeclared as operator parameter.");
+      }
+    }
+
     TlaOperator op = new TlaOperator(stmt);
     environment.define(stmt.name, op);
     return null;
@@ -84,6 +94,10 @@ class Interpreter implements Expr.Visitor<Object>,
   @Override
   public Void visitVarDeclStmt(Stmt.VarDecl stmt) {
     for (Token name : stmt.names) {
+      if (environment.isDefined(name)) {
+        throw new RuntimeError(name, "Operator redeclared as state variable.");
+      }
+
       state.declareVariable(name);
     }
 
@@ -104,7 +118,7 @@ class Interpreter implements Expr.Visitor<Object>,
 
     Stmt.OpDef action = new Stmt.OpDef(stmt.location, new ArrayList<>(), stmt.expression);
     List<State> nextStates = getNextStates(action, state);
-    
+
     if (nextStates.size() == 0) {
       out.println(stringify(false));
     } else if (nextStates.size() == 1) {

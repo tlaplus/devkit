@@ -442,12 +442,59 @@ There is only one more thing to do and then parameterized operators will be full
   }
 </code>
 
+Additional TLA⁺-specific validation is necessary here.
+While we allow redefining operators //themselves// in REPL mode, TLA⁺ does not allow shadowing existing operator names with operator parameter names.
+So, if an operator of name ''x'' exists, and the user tries to define a new operator ''op(x) == ...'', we should raise a runtime error.
+We should also disallow operator definitions with duplicate parameter names like ''op(x, x) == ...''.
+Define a new helper for this near the bottom of the ''Interpreter'' class:
+<code java>
+  private void checkNotDefined(List<Token> names) {
+    for (Token name : names) {
+      if (environment.isDefined(name)) {
+        throw new RuntimeError(name, "Identifier already in use.");
+      }
+    }
+
+    for (int i = 0; i < names.size() - 1; i++) {
+      for (int j = i + 1; j < names.size(); j++) {
+        if (names.get(i).lexeme.equals(names.get(j).lexeme)) {
+          throw new RuntimeError(names.get(i), "Identifier used twice in same list.");
+        }
+      }
+    }
+  }
+</code>
+
+This helper requires a new method in the ''Environment'' class:
+<code java>
+  boolean isDefined(Token name) {
+    return values.containsKey(name.lexeme)
+        || (enclosing != null && enclosing.isDefined(name));
+  }
+</code>
+
+Add a ''checkNotDefined()'' call to ''visitOpDefStmt()'', along with another check that the user is not trying to define an operator like ''x(x) == ...'':
+<code java [highlight_lines_extra="2,3,4,5,6,7"]>
+  public Void visitOpDefStmt(Stmt.OpDef stmt) {
+    checkNotDefined(stmt.params);
+    for (Token param : stmt.params) {
+      if (param.lexeme.equals(stmt.name.lexeme)) {
+        throw new RuntimeError(param, "Identifier already in use.");
+      }
+    }
+
+    TlaOperator op = new TlaOperator(stmt);
+</code>
+
 And that takes care of operators!
 Now to handle functions.
-We still need to implement our ''visitQuantFnExpr()'' method in the ''Interpreter''; similar to other operator evaluation methods like ''visitBinaryExpr()'' we evaluate what we can (here, the set to be quantified over) then branch on the operator type:
+We still need to implement our ''visitQuantFnExpr()'' method in the ''Interpreter'' class.
+Similar to other operator evaluation methods like ''visitBinaryExpr()'' we evaluate what we can (here, the set to be quantified over) then branch on the operator type.
+We also ensure the function parameter names are not shadowing an existing identifier:
 <code java>
   @Override
   public Object visitQuantFnExpr(Expr.QuantFn expr) {
+    checkNotDefined(expr.params);
     Object set = evaluate(expr.set);
     checkSetOperand(expr.op, set);
     switch (expr.op.type) {

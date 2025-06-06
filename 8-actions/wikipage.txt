@@ -72,7 +72,7 @@ class Interpreter implements Expr.Visitor<Object>,
 </code>
 
 This requires a new class!
-Create a file called ''State.java''; for now, this just supports the ability to declare variables:
+Create a file called ''State.java''; for now, this just supports the ability to declare variables; it also produces an error if the user attempts to declare the same variable twice:
 <code java>
 package tla;
 
@@ -82,8 +82,12 @@ import java.util.Map;
 class State {
   private Map<String, Token> variables = new HashMap<>();
 
+  boolean isDeclared(Token name) {
+    return variables.containsKey(name.lexeme);
+  }
+
   void declareVariable(Token name) {
-    if (variables.containsKey(name.lexeme)) {
+    if (isDeclared(name)) {
       throw new RuntimeError(name, "Redeclared state variable.");
     }
 
@@ -92,11 +96,23 @@ class State {
 }
 </code>
 
+We also need to modify the ''Environment'' class, adding a method to check whether a name is already defined:
+<code java>
+  boolean isDefined(Token name) {
+    return values.containsKey(name.lexeme)
+        || (enclosing != null && enclosing.isDefined(name));
+  }
+</code>
+
 That's enough to implement ''visitVarDeclStmt()'' in the ''Interpreter'' class:
 <code java>
   @Override
   public Void visitVarDeclStmt(Stmt.VarDecl stmt) {
     for (Token name : stmt.names) {
+      if (environment.isDefined(name)) {
+        throw new RuntimeError(name, "Operator redeclared as state variable.");
+      }
+
       state.declareVariable(name);
     }
 
@@ -104,4 +120,23 @@ That's enough to implement ''visitVarDeclStmt()'' in the ''Interpreter'' class:
   }
 </code>
 
+In intepreter mode we continue to support redefining operators, but will produce an error if the user attempts to redefine an operator as a state variable.
+We should also produce an error if the user attempts to redefine a state variable as an operator; add this check to the ''visitOpDefStmt()'' method of the ''Interpreter'' class:
+<code java [highlight_lines_extra="2,3,4"]>
+  public Void visitOpDefStmt(Stmt.OpDef stmt) {
+    if (state.isDeclared(stmt.name)) {
+      throw new RuntimeError(stmt.name, "State variable redeclared as operator.");
+    }
+
+    TlaOperator op = new TlaOperator(stmt);
+    environment.define(stmt.name, op);
+</code>
+
 ====== Variable Values ======
+
+Now that we can declare variables, what value are they initialized to?
+We've successfully dodged this issue for a very long time, but unfortunately the initial value of these variables is undefined.
+That means we will need a null value type.
+We've avoided null types thus far, which means we haven't had to do as many checks before using values in the interpreter - a real luxury!
+Alas we now depart this wonderful land.
+
