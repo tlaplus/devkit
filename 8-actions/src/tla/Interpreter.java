@@ -49,7 +49,7 @@ class Interpreter implements Expr.Visitor<Object>,
         state = possibleNext.iterator().next();
         Object satisfies = evaluate(action.body);
         checkBooleanOperand(action.name, satisfies);
-        if ((boolean)satisfies && state.isCompletelyDefined()) nextStates.add(state);
+        if ((boolean)satisfies && !state.isPartial()) nextStates.add(state);
         possibleNext.remove(state);
       }
     } finally {
@@ -106,7 +106,7 @@ class Interpreter implements Expr.Visitor<Object>,
   public Void visitPrintStmt(Stmt.Print stmt) {
     try {
       Object value = evaluate(stmt.expression);
-      if (!(value instanceof Boolean) || !state.isCompletelyDefined()) {
+      if (!(value instanceof Boolean) || state.isPartial()) {
         out.println(stringify(value));
         return null;
       }
@@ -126,7 +126,7 @@ class Interpreter implements Expr.Visitor<Object>,
       state.step();
     } else {
       out.println(stringify(true));
-      out.println("Select " + (state.isInitialState() ? "initial" : "next") + " state (number):");
+      out.println("Select next state (number):");
       for (int i = 0; i < nextStates.size(); i++) {
         out.println(i + ":");
         out.println(nextStates.get(i));
@@ -163,14 +163,12 @@ class Interpreter implements Expr.Visitor<Object>,
         checkSetOperand(expr.operator, right);
         if (left instanceof UnboundVariable) {
           UnboundVariable var = (UnboundVariable)left;
-          if (var.primed() || state.isInitialState()) {
-            State current = state;
-            for (Object element : (Set<?>)right) {
-              state = new State(current);
-              state.bindValue(var, element);
-              left = element;
-              possibleNext.add(state);
-            }
+          State current = state;
+          for (Object element : (Set<?>)right) {
+            state = new State(current);
+            state.bindValue(var, element);
+            left = element;
+            possibleNext.add(state);
           }
         }
         checkIsDefined(left);

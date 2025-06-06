@@ -199,10 +199,10 @@ To define ''getValue()'' in the ''State'' class we need to determine whether to 
 For this there must be some way of tracking whether we are currently inside a primed expression.
 Not just variables can be primed in TLA⁺, entire expressions can be!
 The meaning of a primed expression is that every state variable within that expression is primed.
-This is tracked with a boolean class variable in ''State'', which is initialized to false:
+This is tracked with a boolean class variable in ''State'', which is initialized to true (for reasons which later be made clear):
 <code java [highlight_lines_extra="2"]>
 class State {
-  private boolean primed = false;
+  private boolean primed = true;
   private Map<String, Token> variables = new HashMap<>();
 </code>
 
@@ -258,10 +258,6 @@ We need to put the code at the top of ''visitUnaryExpr()'' because the other una
 Let's define the ''prime()'' and ''unprime()'' methods in the ''State'' class:
 <code java>
   void prime(Token op) {
-    if (primed) {
-      throw new RuntimeError(op, "Cannot double-prime expression.");
-    }
-
     primed = true;
   }
 
@@ -270,35 +266,13 @@ Let's define the ''prime()'' and ''unprime()'' methods in the ''State'' class:
   }
 </code>
 
-Double-priming an expression is illegal in TLA⁺, so results in a runtime error.
-
 ===== Error Checking =====
 
 Our code is nice & simple, but unfortunately it has more holes than Swiss cheese.
 Let's muddy it up with a bunch of error checks.
 
-First, we have to think about initial states.
-Not all components of a TLA⁺ spec are actions; the initial state is a predicate only on unprimed variables.
-What if we are in the initial state and process an expression containing a primed variable?
-It should result in an error.
-Add another field to ''State'' indicating whether the interpreter is in the initial state; as you might expect, this is initially true:
-<code java [highlight_lines_extra="2"]>
-class State {
-  private boolean initialState = true;
-  private boolean primed = false;
-</code>
-
-In ''bindValue()'', raise an error if the user attempts to bind the value of a primed variable in the initial state:
-<code java [highlight_lines_extra="2,3,4,5"]>
- void bindValue(UnboundVariable var, Object value) {
-    if (var.primed() && initialState) {
-      throw new RuntimeError(var.name(),
-          "Cannot prime variable in initial state.");
-    }
-</code>
-
-Here we encounter the annoyance of introducing a null value type: we need to sprinkle null checks throughout our evaluation code!
-Thankfully many null checks are already handled by our existing stable of ''check-Operand()'' helpers, but now we need to be extra careful.
+Null value types like ''UnboundVariable'' produce a major annoyance: we now need to sprinkle null checks throughout our evaluation code!
+Thankfully many null checks are already handled by our existing stable of ''check-Operand()'' helpers, but some cases still remain.
 Near the bottom of the ''Interpreter'' class, create a new helper method ''checkIsDefined()'':
 <code java>
   private void checkIsDefined(Object... operands) {
@@ -311,7 +285,21 @@ Near the bottom of the ''Interpreter'' class, create a new helper method ''check
   }
 </code>
 
-Add a quick null check to the ''LEFT_BRACE'' case of ''visitVariadicExpr()''; we can't let the user construct sets full of undefined values!
+In our ''EQUALS'' handling logic, we can only bind the value of ''right'' to a variable if ''right'' has a defined concrete value.
+Also, two values can only be compared for equality if they are both defined:
+<code java [highlight_lines_extra="4,8"]>
+      case EQUAL:
+        if (left instanceof UnboundVariable) {
+          UnboundVariable var = (UnboundVariable)left;
+          checkIsDefined(right);
+          state.bindValue(var, right);
+          return true;
+        }
+        checkIsDefined(left, right);
+        return left.equals(right);
+</code>
+
+A null check also must be added to the ''LEFT_BRACE'' case of ''visitVariadicExpr()''; we can't let the user construct sets full of undefined values!
 <code java [highlight_lines_extra="5"]>
       case LEFT_BRACE:
         Set<Object> set = new HashSet<Object>();
@@ -321,4 +309,60 @@ Add a quick null check to the ''LEFT_BRACE'' case of ''visitVariadicExpr()''; we
           set.add(value);
         }
 </code>
+
+===== The Initial State =====
+
+We can declare, set, and get state variables, but how does this all come together into a sequence of states?
+It starts with the initial state.
+Not all components of a TLA⁺ spec are actions; the initial state predicate only operates on unprimed variables.
+While we //could// add another field to ''State'' recording whether we are in the initial state, this is unnecessary.
+Remember when we initialized ''prime'' to true?
+This implicitly puts us in the initial state; variables will have their values bound in ''next'', and if the user tries to prime a variable in the initial state we raise an error:
+<code java [highlight_lines_extra="2,3,4,5"]>
+  void prime(Token op) {
+    if (primed) {
+      throw new RuntimeError(op,
+          "Cannot double-prime expression or prime initial state.");
+    }
+
+    primed = true;
+  }
+</code>
+Once we transition to a non-initial state ''isPrimed'' becomes false outside of primed expressions.
+This check also catches the case where users double-prime an expression, which is illegal in TLA⁺.
+
+Now we define the all-important ''step()'' method of the ''State'' class, which transitions it to the next state:
+<code java>
+  void step() {
+    primed = false;
+    current = next;
+    next = new HashMap<>();
+    for (Map.Entry<String, Token> var : variables.entrySet()) {
+      next.put(var.getKey(), new UnboundVariable(var.getValue(), true));
+    }
+  }
+</code>
+
+Now we can define the initial state using a non-primed predicate, step, define the next state using primed variables, then step again //ad infinitum//.
+All we have to do is wire everything up; first, though, we need to think about nondeterminism.
+
+===== Nondeterminism =====
+
+In TLA⁺, states generally do not have only one successor state.
+Instead, there are multiple possible states to transition to.
+This is called nondeterminism and is a key TLA⁺ feature enabling modeling of concurrent scheduling & much more.
+
+We now introduce the concept of a partially-defined state, which is when not all variables have yet been bound to a concrete value.
+When all variables have been bound we say the state is complete.
+The initial state is complete if all variables have been bound in the current state; non-initial states are complete if all variables have been bound in the //next// state (implicitly, non-initial states have all variables bound in their current state).
+To avoid weird behavior we say that a state is only complete if it has at least one declared variable.
+Define the method ''isPartial()'' in the ''State'' class:
+<code java>
+  boolean isPartial() {
+    Map<String, Object> binding = initialState ? current : next;
+    return binding.isEmpty() || binding.values().stream()
+        .anyMatch(v -> v instanceof UnboundVariable);
+  }
+</code>
+
 
