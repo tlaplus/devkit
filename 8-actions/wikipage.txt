@@ -1,17 +1,17 @@
 ======= Variables, States, and Actions =======
 
-Up to now everything we've done would be at home in any other ordinary programming language.
+Currently, our implementation is not significantly different from any other ordinary programming language.
 However, TLA⁺ is not an ordinary language - it isn't even a programming language!
 TLA⁺ specifications are not programs.
 Properly speaking, a TLA⁺ specification is a predicate over an infinite sequence of states, where states are an assignment of values to variables.
-The closest analogue it has to executing a program is to enumerate the set of all unique reachable states, over which state traces occur.
+TLA⁺ specs' closest analogue to program execution is enumerating the set of all unique reachable states, over which state traces occur.
 The focus of this chapter is thus to introduce states and how to transition between them using actions.
 
 Every model-checkable TLA⁺ specification contains variables.
 These variables are different from the identifiers associated with operators in past chapters.
 The variables constitute a static set of identifiers associated with values in each system state.
 TLA⁺ also has actions, which are expressions containing the prime operator.
-The prime operator is used to specify the value of variables in the *next* state.
+The prime operator is used to specify the value of variables in the //next// state.
 For example:
 <code haskell>
 VARIABLE x
@@ -30,11 +30,11 @@ However, here at the implementation level we don't have the luxury of being able
 We have to be smart, and pull clues about next state values directly from the action itself.
 What this means is that we only support certain types of expressions incorporating primed variables, so we restrict ourselves to only model-checking TLA⁺ specs written in a particular idiom.
 
-======= Variables and Priming =======
 Let's start by supporting a simple operation on primed variables, expressions of the form ''x' = expr''.
 There is a fair bit of groundwork necessary to reach that point.
 
-====== Variable Declarations ======
+===== Declaring State Variables =====
+
 First off we have to add support for variable declarations; these are top-level syntactic constructs that look like ''VARIABLES x, y, z''.
 Create a new statement type for them in the ''GenerateAst'' class:
 <code java [highlight_lines_extra="2"]>
@@ -96,23 +96,12 @@ class State {
 }
 </code>
 
-We also need to modify the ''Environment'' class, adding a method to check whether a name is already defined:
-<code java>
-  boolean isDefined(Token name) {
-    return values.containsKey(name.lexeme)
-        || (enclosing != null && enclosing.isDefined(name));
-  }
-</code>
-
 That's enough to implement ''visitVarDeclStmt()'' in the ''Interpreter'' class:
 <code java>
   @Override
   public Void visitVarDeclStmt(Stmt.VarDecl stmt) {
+    checkNotDefined(stmt.names);
     for (Token name : stmt.names) {
-      if (environment.isDefined(name)) {
-        throw new RuntimeError(name, "Operator redeclared as state variable.");
-      }
-
       state.declareVariable(name);
     }
 
@@ -120,8 +109,8 @@ That's enough to implement ''visitVarDeclStmt()'' in the ''Interpreter'' class:
   }
 </code>
 
-In intepreter mode we continue to support redefining operators, but will produce an error if the user attempts to redefine an operator as a state variable.
-We should also produce an error if the user attempts to redefine a state variable as an operator; add this check to the ''visitOpDefStmt()'' method of the ''Interpreter'' class:
+In intepreter mode we continue to support redefining operators, but will produce an error if the user attempts to redefine an operator as a state variable or vice versa.
+Add this check to the ''visitOpDefStmt()'' method of the ''Interpreter'' class:
 <code java [highlight_lines_extra="2,3,4"]>
   public Void visitOpDefStmt(Stmt.OpDef stmt) {
     if (state.isDeclared(stmt.name)) {
@@ -132,11 +121,204 @@ We should also produce an error if the user attempts to redefine a state variabl
     environment.define(stmt.name, op);
 </code>
 
-====== Variable Values ======
+Also augment the ''checkNotDefined()'' helper method, so state variables cannot be shadowed by operator parameters:
+<code java [highlight_lines_extra="7,8,9"]>
+  private void checkNotDefined(List<Token> names) {
+    for (Token name : names) {
+      if (environment.isDefined(name)) {
+        throw new RuntimeError(name, "Identifier already in use.");
+      }
+
+      if (state.isDeclared(name)) {
+        throw new RuntimeError(name, "Name conflicts with state variable.");
+      }
+    }
+</code>
+
+===== Initializing State Variables =====
 
 Now that we can declare variables, what value are they initialized to?
-We've successfully dodged this issue for a very long time, but unfortunately the initial value of these variables is undefined.
+We've successfully dodged this issue for a very long time in this tutorial series, but unfortunately the initial value of these variables is undefined.
 That means we will need a null value type.
 We've avoided null types thus far, which means we haven't had to do as many checks before using values in the interpreter - a real luxury!
 Alas we now depart this wonderful land.
+Create a new class, ''UnboundVariable.java'':
+<code java>
+package tla;
+
+record UnboundVariable(Token name, boolean primed) {
+  @Override
+  public String toString() {
+    return name.lexeme + (primed ? "'" : "");
+  }
+}
+</code>
+
+In the ''State'' class, we need to track variable values for the current & next states; add one ''Map<>'' instance for each:
+<code java [highlight_lines_extra="3,4"]>
+class State {
+  private Map<String, Token> variables = new HashMap<>();
+  private Map<String, Object> current = new HashMap<>();
+  private Map<String, Object> next = new HashMap<>();
+</code>
+
+Then, in ''declareVariable()'', initialize the variables to instances of ''UnboundVariable'':
+<code java [highlight_lines_extra="2,3,4"]>
+    variables.put(name.lexeme, name);
+    current.put(name.lexeme, new UnboundVariable(name, false));
+    next.put(name.lexeme, new UnboundVariable(name, true));
+  }
+</code>
+
+===== Getting State Variables =====
+
+To retrieve variable values, modify the ever-more-complicated ''visitVariableExpr()'' method of the ''Interpreter'' class to call a new ''getValue()'' helper; if the value resolves to an ''UnboundVariable'' instance, return it immediately:
+<code java [highlight_lines_extra="2,4,5,6"]>
+  public Object visitVariableExpr(Expr.Variable expr) {
+    Object referent = getValue(expr.name);
+
+    if (referent instanceof UnboundVariable) {
+      return referent;
+    }
+
+    if (!(referent instanceof TlaCallable)) {
+</code>
+
+The new ''getValue()'' helper merges lookup logic for state variables & operators; these should be disjoint, although state variable values are checked first:
+<code java>
+  private Object getValue(Token name) {
+    if (state.isDeclared(name)) {
+      return state.getValue(name);
+    }
+
+    return environment.get(name);
+  }
+</code>
+
+To define ''getValue()'' in the ''State'' class we need to determine whether to pull state variable values from ''current'' or ''next''.
+For this there must be some way of tracking whether we are currently inside a primed expression.
+Not just variables can be primed in TLA⁺, entire expressions can be!
+The meaning of a primed expression is that every state variable within that expression is primed.
+This is tracked with a boolean class variable in ''State'', which is initialized to false:
+<code java [highlight_lines_extra="2"]>
+class State {
+  private boolean primed = false;
+  private Map<String, Token> variables = new HashMap<>();
+</code>
+
+Now define ''getValue()'' in the ''State'' class.
+If ''primed'' is true, we retrieve the state variable value from ''next''; if false, we retrieve it from ''current'':
+<code java>
+  Object getValue(Token name) {
+    return (primed ? next : current).get(name.lexeme);
+  }
+</code>
+
+===== Setting State Variables =====
+
+We can retrieve state variable values, but what about assigning them?
+To start, let's handle the simple case of expressions of the form ''x = expr'' or ''x' = expr''.
+This requires modifying the ''EQUAL'' case of ''visitBinaryExpr()'' in the ''Interpreter'' class.
+If the ''left'' operand is an ''UnboundVariable'' instance, then bind the ''left'' state variable to the value of ''right'':
+<code java [highlight_lines_extra="2,3,4,5,6"]>
+      case EQUAL:
+        if (left instanceof UnboundVariable) {
+          UnboundVariable var = (UnboundVariable)left;
+          state.bindValue(var, right);
+          return true;
+        }
+        return left.equals(right);
+</code>
+
+Define ''bindValue()'' in the ''State'' class, which binds the variable's value in ''next'' if the ''UnboundVariable'' instance is primed and ''current'' if it is not:
+<code java>
+  void bindValue(UnboundVariable var, Object value) {
+    (var.primed() ? next : current).put(var.name().lexeme, value);
+  }
+</code>
+
+===== The Prime Operator =====
+
+We now have everything necessary to define the prime operator.
+Here's how it should work: in ''visitUnaryExpr()'' in the ''Interpreter'' class, detect that we are evaluating the prime operator; if so, prime the current state, evaluate the operand as a primed expression, then unprime the state and return the value of the operand.
+<code java>
+  public Object visitUnaryExpr(Expr.Unary expr) {
+    if (TokenType.PRIME == expr.operator.type) {
+      state.prime(expr.operator);
+      try {
+        return evaluate(expr.expr);
+      } finally {
+        state.unprime();
+      }
+    }
+</code>
+Note that we wrap the evaluation in a ''try''/''finally'' similar to in ''executeBlock()'', to restore the interpreter to an ordinary state if the evaluation results in an exception.
+
+We need to put the code at the top of ''visitUnaryExpr()'' because the other unary operators evaluate the operand first, but the prime operator changes how the operand is evaluated - it calls ''state.prime()'' beforehand!
+Let's define the ''prime()'' and ''unprime()'' methods in the ''State'' class:
+<code java>
+  void prime(Token op) {
+    if (primed) {
+      throw new RuntimeError(op, "Cannot double-prime expression.");
+    }
+
+    primed = true;
+  }
+
+  void unprime() {
+    primed = false;
+  }
+</code>
+
+Double-priming an expression is illegal in TLA⁺, so results in a runtime error.
+
+===== Error Checking =====
+
+Our code is nice & simple, but unfortunately it has more holes than Swiss cheese.
+Let's muddy it up with a bunch of error checks.
+
+First, we have to think about initial states.
+Not all components of a TLA⁺ spec are actions; the initial state is a predicate only on unprimed variables.
+What if we are in the initial state and process an expression containing a primed variable?
+It should result in an error.
+Add another field to ''State'' indicating whether the interpreter is in the initial state; as you might expect, this is initially true:
+<code java [highlight_lines_extra="2"]>
+class State {
+  private boolean initialState = true;
+  private boolean primed = false;
+</code>
+
+In ''bindValue()'', raise an error if the user attempts to bind the value of a primed variable in the initial state:
+<code java [highlight_lines_extra="2,3,4,5"]>
+ void bindValue(UnboundVariable var, Object value) {
+    if (var.primed() && initialState) {
+      throw new RuntimeError(var.name(),
+          "Cannot prime variable in initial state.");
+    }
+</code>
+
+Here we encounter the annoyance of introducing a null value type: we need to sprinkle null checks throughout our evaluation code!
+Thankfully many null checks are already handled by our existing stable of ''check-Operand()'' helpers, but now we need to be extra careful.
+Near the bottom of the ''Interpreter'' class, create a new helper method ''checkIsDefined()'':
+<code java>
+  private void checkIsDefined(Object... operands) {
+    for (Object operand : operands) {
+      if (operand instanceof UnboundVariable) {
+        UnboundVariable var = (UnboundVariable)operand;
+        throw new RuntimeError(var.name(), "Use of unbound variable.");
+      }
+    }
+  }
+</code>
+
+Add a quick null check to the ''LEFT_BRACE'' case of ''visitVariadicExpr()''; we can't let the user construct sets full of undefined values!
+<code java [highlight_lines_extra="5"]>
+      case LEFT_BRACE:
+        Set<Object> set = new HashSet<Object>();
+        for (Expr parameter : expr.parameters) {
+          Object value = evaluate(parameter);
+          checkIsDefined(value);
+          set.add(value);
+        }
+</code>
 

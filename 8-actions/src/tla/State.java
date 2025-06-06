@@ -4,20 +4,20 @@ import java.util.HashMap;
 import java.util.Map;
 
 class State {
+  private boolean initialState = true;
+  private boolean primed = false;
   private Map<String, Token> variables = new HashMap<>();
-  private Map<String, Object> currentState = new HashMap<>();
-  private Map<String, Object> nextState = new HashMap<>();
-  private boolean isInitialState = true;
-  private boolean isPrimed = false;
+  private Map<String, Object> current = new HashMap<>();
+  private Map<String, Object> next = new HashMap<>();
 
   State() { }
 
   State(State other) {
     this.variables = new HashMap<>(other.variables);
-    this.currentState = new HashMap<>(other.currentState);
-    this.nextState = new HashMap<>(other.nextState);
-    this.isInitialState = other.isInitialState;
-    this.isPrimed = other.isPrimed;
+    this.current = new HashMap<>(other.current);
+    this.next = new HashMap<>(other.next);
+    this.initialState = other.initialState;
+    this.primed = other.primed;
   }
 
   boolean isDeclared(Token name) {
@@ -30,79 +30,69 @@ class State {
     }
 
     variables.put(name.lexeme, name);
-    UnboundVariable var = new UnboundVariable(name, false);
-    currentState.put(name.lexeme, var);
-    nextState.put(name.lexeme, var.prime());
+    current.put(name.lexeme, new UnboundVariable(name, false));
+    next.put(name.lexeme, new UnboundVariable(name, true));
   }
 
   void bindValue(UnboundVariable var, Object value) {
-    if (var.isPrimed() && isInitialState) {
+    if (var.primed() && initialState) {
       throw new RuntimeError(var.name(),
           "Cannot prime variable in initial state.");
     }
 
-    Map<String, Object> state = state(var.isPrimed());
-    state.put(var.name().lexeme, value);
+    (var.primed() ? next : current).put(var.name().lexeme, value);
   }
 
   Object getValue(Token name) {
-    return state(isPrimed).get(name.lexeme);
+    return (primed ? next : current).get(name.lexeme);
   }
 
   boolean isCompletelyDefined() {
-    Map<String, Object> binding = isInitialState ? currentState : nextState;
+    Map<String, Object> binding = initialState ? current : next;
     return !binding.isEmpty() && binding.values().stream()
         .noneMatch(v -> v instanceof UnboundVariable);
   }
 
   void reset() {
-    Map<String, Object> binding = isInitialState ? currentState : nextState;
+    Map<String, Object> binding = initialState ? current : next;
     for (Map.Entry<String, Token> var : variables.entrySet()) {
-      binding.put(var.getKey(), new UnboundVariable(var.getValue(), !isInitialState));
+      binding.put(var.getKey(), new UnboundVariable(var.getValue(), !initialState));
     }
   }
 
   void prime(Token op) {
-    if (isPrimed) {
-      throw new RuntimeError(op,
-          "Cannot double-prime an expression.");
+    if (primed) {
+      throw new RuntimeError(op, "Cannot double-prime expression.");
     }
-    isPrimed = true;
+
+    primed = true;
   }
 
-  void unPrime() {
-    isPrimed = false;
+  void unprime() {
+    primed = false;
   }
 
-  boolean isPrimed() {
-    return isPrimed;
-  }
-
-  boolean isInitialState() {
-    return isInitialState;
+  boolean initialState() {
+    return initialState;
   }
 
   void step() {
-    if (isInitialState) {
-      isInitialState = false;
+    if (initialState) {
+      initialState = false;
     } else {
-      currentState = nextState;
-      nextState = new HashMap<>();
+      current = next;
+      next = new HashMap<>();
       for (Map.Entry<String, Token> var : variables.entrySet()) {
-        nextState.put(var.getKey(), new UnboundVariable(var.getValue(), true));
+        next.put(var.getKey(), new UnboundVariable(var.getValue(), true));
       }
     }
   }
 
-  private Map<String, Object> state(boolean isPrimed) {
-    return isPrimed ? nextState : currentState;
-  }
-
   @Override
   public String toString() {
-    return isInitialState ?
-        currentState.toString() :
-        "Current: " + currentState.toString() + "\n" +
-        "Next:    " + nextState.toString();
+    return initialState ?
+        current.toString() :
+        "Current: " + current.toString() + "\n" +
+        "Next:    " + next.toString();
   }
 }

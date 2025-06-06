@@ -83,6 +83,10 @@ class Interpreter implements Expr.Visitor<Object>,
       }
     }
 
+    if (state.isDeclared(stmt.name)) {
+      throw new RuntimeError(stmt.name, "State variable redeclared as operator.");
+    }
+
     TlaOperator op = new TlaOperator(stmt);
     environment.define(stmt.name, op);
     return null;
@@ -90,11 +94,8 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Void visitVarDeclStmt(Stmt.VarDecl stmt) {
+    checkNotDefined(stmt.names);
     for (Token name : stmt.names) {
-      if (environment.isDefined(name)) {
-        throw new RuntimeError(name, "Operator redeclared as state variable.");
-      }
-
       state.declareVariable(name);
     }
 
@@ -146,7 +147,6 @@ class Interpreter implements Expr.Visitor<Object>,
   public Object visitBinaryExpr(Expr.Binary expr) {
     Object left = evaluate(expr.left);
     Object right = evaluate(expr.right);
-    UnboundVariable var;
     switch (expr.operator.type) {
       case DOT_DOT:
         checkNumberOperands(expr.operator, left, right);
@@ -161,8 +161,9 @@ class Interpreter implements Expr.Visitor<Object>,
         return set;
       case IN:
         checkSetOperand(expr.operator, right);
-        if ((var = UnboundVariable.as(left)) != null) {
-          if (var.isPrimed() || state.isInitialState()) {
+        if (left instanceof UnboundVariable) {
+          UnboundVariable var = (UnboundVariable)left;
+          if (var.primed() || state.isInitialState()) {
             State current = state;
             for (Object element : (Set<?>)right) {
               state = new State(current);
@@ -184,12 +185,11 @@ class Interpreter implements Expr.Visitor<Object>,
         checkNumberOperands(expr.operator, left, right);
         return (int)left < (int)right;
       case EQUAL:
-        if ((var = UnboundVariable.as(left)) != null) {
-          if (var.isPrimed() || state.isInitialState()) {
-            checkIsDefined(right);
-            state.bindValue(var, right);
-            left = right;
-          }
+        if (left instanceof UnboundVariable) {
+          UnboundVariable var = (UnboundVariable)left;
+          checkIsDefined(right);
+          state.bindValue(var, right);
+          return true;
         }
         checkIsDefined(left, right);
         return left.equals(right);
@@ -297,17 +297,17 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object visitUnaryExpr(Expr.Unary expr) {
-    if (expr.operator.type == TokenType.PRIME) {
+    if (TokenType.PRIME == expr.operator.type) {
       state.prime(expr.operator);
+      try {
+        return evaluate(expr.expr);
+      } finally {
+        state.unprime();
+      }
     }
 
-    // TODO: handle unpriming if error
     Object operand = evaluate(expr.expr);
-
     switch (expr.operator.type) {
-      case PRIME:
-        state.unPrime();
-        return operand;
       case ENABLED:
         checkBooleanOperand(expr.operator, operand);
         return (boolean)operand;
@@ -385,9 +385,9 @@ class Interpreter implements Expr.Visitor<Object>,
   }
 
   private void checkIsDefined(Object... operands) {
-    UnboundVariable var;
     for (Object operand : operands) {
-      if ((var = UnboundVariable.as(operand)) != null) {
+      if (operand instanceof UnboundVariable) {
+        UnboundVariable var = (UnboundVariable)operand;
         throw new RuntimeError(var.name(), "Use of unbound variable.");
       }
     }
@@ -397,6 +397,10 @@ class Interpreter implements Expr.Visitor<Object>,
     for (Token name : names) {
       if (environment.isDefined(name)) {
         throw new RuntimeError(name, "Identifier already in use.");
+      }
+
+      if (state.isDeclared(name)) {
+        throw new RuntimeError(name, "Name conflicts with state variable.");
       }
     }
 
