@@ -34,9 +34,6 @@ public class TestExpressionEvaluation {
     assertEquals("-4", interpret("-4"));
     assertEquals("0", interpret("-0"));
     assertEquals("10", interpret("--10"));
-    assertEquals("true", interpret("TRUE'"));
-    assertEquals("false", interpret("FALSE'"));
-    assertEquals("1", interpret("1'"));
   }
 
   @Test

@@ -142,19 +142,21 @@ We've successfully dodged this issue for a very long time in this tutorial serie
 That means we will need a null value type.
 We've avoided null types thus far, which means we haven't had to do as many checks before using values in the interpreter - a real luxury!
 Alas we now depart this wonderful land.
-Create a new class, ''UnboundVariable.java'':
-<code java>
-package tla;
+Create a new record class ''UnboundVariable'' nested inside the ''State'' class:
+<code java [highlight_lines_extra="3,4,5,6,7,8"]>
+  private Map<String, Token> variables = new HashMap<>();
 
-record UnboundVariable(Token name, boolean primed) {
-  @Override
-  public String toString() {
-    return name.lexeme + (primed ? "'" : "");
+  record UnboundVariable(Token name) {
+    @Override
+    public String toString() {
+      return name.lexeme;
+    }
   }
-}
+
+  boolean isDeclared(Token name) {
 </code>
 
-In the ''State'' class, we need to track variable values for the current & next states; add one ''Map<>'' instance for each:
+Also in the ''State'' class, we need to track variable values for the current & next states; add one ''Map<>'' instance for each:
 <code java [highlight_lines_extra="3,4"]>
 class State {
   private Map<String, Token> variables = new HashMap<>();
@@ -162,11 +164,20 @@ class State {
   private Map<String, Object> next = new HashMap<>();
 </code>
 
-Then, in ''declareVariable()'', initialize the variables to instances of ''UnboundVariable'':
+Then, in ''declareVariable()'', initialize the variables in ''next'' to instances of ''UnboundVariable''; the ones in ''current'' are initialized to null, as they should never be accessed during ordinary operation (more on this below):
 <code java [highlight_lines_extra="2,3,4"]>
     variables.put(name.lexeme, name);
-    current.put(name.lexeme, new UnboundVariable(name, false));
+    current.put(name.lexeme, null);
     next.put(name.lexeme, new UnboundVariable(name, true));
+  }
+</code>
+
+Finally, make debugging a bit easier by implementing ''toString()'' for the ''State'' class:
+<code java>
+  @Override
+  public String toString() {
+    return  "Current: " + current.toString() + "\n" +
+            "Next:    " + next.toString();
   }
 </code>
 
@@ -177,7 +188,7 @@ To retrieve variable values, modify the ever-more-complicated ''visitVariableExp
   public Object visitVariableExpr(Expr.Variable expr) {
     Object referent = getValue(expr.name);
 
-    if (referent instanceof UnboundVariable) {
+    if (referent instanceof State.UnboundVariable) {
       return referent;
     }
 
@@ -217,12 +228,12 @@ If ''primed'' is true, we retrieve the state variable value from ''next''; if fa
 ===== Setting State Variables =====
 
 We can retrieve state variable values, but what about assigning them?
-To start, let's handle the simple case of expressions of the form ''x = expr'' or ''x' = expr''.
+To start, let's handle the simple case of expressions of the form ''x' = expr''.
 This requires modifying the ''EQUAL'' case of ''visitBinaryExpr()'' in the ''Interpreter'' class.
 If the ''left'' operand is an ''UnboundVariable'' instance, then bind the ''left'' state variable to the value of ''right'':
 <code java [highlight_lines_extra="2,3,4,5,6"]>
       case EQUAL:
-        if (left instanceof UnboundVariable) {
+        if (left instanceof State.UnboundVariable) {
           UnboundVariable var = (UnboundVariable)left;
           state.bindValue(var, right);
           return true;
@@ -233,9 +244,12 @@ If the ''left'' operand is an ''UnboundVariable'' instance, then bind the ''left
 Define ''bindValue()'' in the ''State'' class, which binds the variable's value in ''next'' if the ''UnboundVariable'' instance is primed and ''current'' if it is not:
 <code java>
   void bindValue(UnboundVariable var, Object value) {
-    (var.primed() ? next : current).put(var.name().lexeme, value);
+    next.put(var.name().lexeme, value);
   }
 </code>
+
+Only modification of ''next'' is supported, not ''current''.
+While this seems like it could lead to bugs, our method of handling initial states (defined below) ensures it does not.
 
 ===== The Prime Operator =====
 
@@ -277,7 +291,7 @@ Near the bottom of the ''Interpreter'' class, create a new helper method ''check
 <code java>
   private void checkIsDefined(Object... operands) {
     for (Object operand : operands) {
-      if (operand instanceof UnboundVariable) {
+      if (operand instanceof State.UnboundVariable) {
         UnboundVariable var = (UnboundVariable)operand;
         throw new RuntimeError(var.name(), "Use of unbound variable.");
       }
@@ -289,7 +303,7 @@ In our ''EQUALS'' handling logic, we can only bind the value of ''right'' to a v
 Also, two values can only be compared for equality if they are both defined:
 <code java [highlight_lines_extra="4,8"]>
       case EQUAL:
-        if (left instanceof UnboundVariable) {
+        if (left instanceof State.UnboundVariable) {
           UnboundVariable var = (UnboundVariable)left;
           checkIsDefined(right);
           state.bindValue(var, right);
@@ -331,7 +345,7 @@ This implicitly puts us in the initial state; variables will have their values b
 Once we transition to a non-initial state ''isPrimed'' becomes false outside of primed expressions.
 This check also catches the case where users double-prime an expression, which is illegal in TLA⁺.
 
-Now we define the all-important ''step()'' method of the ''State'' class, which transitions it to the next state:
+Next we define the all-important ''step()'' method of the ''State'' class, which transitions it to the next state:
 <code java>
   void step() {
     primed = false;
@@ -344,7 +358,7 @@ Now we define the all-important ''step()'' method of the ''State'' class, which 
 </code>
 
 Now we can define the initial state using a non-primed predicate, step, define the next state using primed variables, then step again //ad infinitum//.
-All we have to do is wire everything up; first, though, we need to think about nondeterminism.
+All we have to do is wire everything up; first, though, we should tackle nondeterminism.
 
 ===== Nondeterminism =====
 
@@ -354,11 +368,11 @@ This is called nondeterminism, and is a key TLA⁺ feature enabling modeling of 
 Nondeterminism is expressed in TLA⁺ through the use of disjunction; for example:
 <code haskell>
 Action ==
+  \/ x' = 0
   \/ x' = 1
-  \/ x' = 2
 </code>
-The ''Action'' predicate matches next states where ''x'' is //either// 1 or 2.
-This means ''Action'' represents a nondeterministic step where the system can arbitrarily move to a state where ''x'' is 1, or a state where ''x'' is 2.
+The ''Action'' predicate matches next states where ''x'' is //either// 0 or 1.
+This means ''Action'' represents a nondeterministic step where the system can arbitrarily move to a state where ''x'' is 0, or a state where ''x'' is 1.
 
 Currently, we store the state in a single object in the ''Interpreter'' class.
 How can we represent & compute with multiple possible next states?
@@ -434,7 +448,7 @@ Modify the ''OR'' handling code in ''visitVariadicExpr()'' as highlighted:
         boolean result = false;
         State current = state;
         for (Expr disjunct : expr.parameters) {
-          state = new State(current);
+          state = current.branch();
           Object junctResult = evaluate(disjunct);
           checkBooleanOperand(expr.operator, junctResult);
           possibleNext.add(state);
@@ -444,17 +458,29 @@ Modify the ''OR'' handling code in ''visitVariadicExpr()'' as highlighted:
       default:
 </code>
 
-There's one other operator we will support for binding state variables: the set membership ''\in'' operator.
-Actions like ''x' \in {0, 1}'' are equivalent to ''x' = 0 \/ x' = 1''.
+This requires creating a new ''branch()'' method in the ''State'' class, which shares references to all fields except ''next'', which is copied:
+<code java>
+  State branch() {
+    State branch = new State();
+    branch.primed = this.primed;
+    branch.variables = this.variables;
+    branch.current = this.current;
+    branch.next = new HashMap<>(this.next);
+    return branch;
+  }
+</code>
+
+There are two other operators to support for binding state variables: the set membership ''\in'' operator, and the ''\E'' existential quantification operator.
+Actions like ''x' \in {0, 1}'' or ''\E v \in {0, 1} : x' = v'' are equivalent to ''x' = 0 \/ x' = 1''.
 Add the following code to the ''IN'' case in ''visitBinaryExpr()'':
 <code java [highlight_lines_extra="3,4,5,6,7,8,9,10,11,12,13"]>
       case IN:
         checkSetOperand(expr.operator, right);
-        if (left instanceof UnboundVariable) {
+        if (left instanceof State.UnboundVariable) {
           UnboundVariable var = (UnboundVariable)left;
           State current = state;
           for (Object element : (Set<?>)right) {
-            state = new State(current);
+            state = current.branch();
             state.bindValue(var, element);
             left = element;
             possibleNext.add(state);
@@ -464,5 +490,20 @@ Add the following code to the ''IN'' case in ''visitBinaryExpr()'':
         return ((Set<?>)right).contains(left);
 </code>
 
-We can now generate possible next states by calling ''getNextStates()'' with an appropriate action!
+Then update the ''EXISTS'' case of ''visitQuantFnExpr()'' as highlighted:
+<code java [highlight_lines_extra="3,5,8"]>
+      } case EXISTS: {
+        boolean result = false;
+        State current = state;
+        for (Environment binding : bindings) {
+          state = current.branch();
+          Object junctResult = executeBlock(expr.body, binding);
+          checkBooleanOperand(expr.op, junctResult);
+          possibleNext.add(state);
+          result |= (boolean)junctResult;
+        }
+        return result;
+</code>
+
+We can now generate all nondeterministic next states by calling ''getNextStates()'' with an appropriate action!
 

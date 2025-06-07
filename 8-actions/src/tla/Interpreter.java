@@ -13,8 +13,19 @@ class Interpreter implements Expr.Visitor<Object>,
   final Environment globals;
   private Environment environment;
   private final PrintStream out;
-  private State state = new State();
-  private final Set<State> possibleNext = new HashSet<>();
+
+  private boolean primed = true;
+  private final Map<String, Token> variables = new HashMap<>();
+  private Map<String, Object> current = null;
+  private Map<String, Object> next = new HashMap<>();
+  private final Set<Map<String, Object>> possibleNext = new HashSet<>();
+  
+  private record UnboundVariable(Token name) {
+    @Override
+    public String toString() {
+      return name.lexeme;
+    }
+  }
 
   public Interpreter(PrintStream out, boolean replMode) {
     this.globals = new Environment(replMode);
@@ -36,25 +47,21 @@ class Interpreter implements Expr.Visitor<Object>,
     stmt.accept(this);
   }
 
-  List<State> getNextStates(Stmt.OpDef action, State current) {
-    if (!action.params.isEmpty()) {
-      throw new RuntimeError(action.name,
-          "Cannot use parameterized operator as top-level action.");
-    }
-
-    Set<State> confirmedNext = new HashSet<>();
+  List<Map<String, Object>> getNextStates(Token location, Expr action) {
+    Set<Map<String, Object>> confirmedNext = new HashSet<>();
+    clearNext();
+    possibleNext.add(next);
     try {
-      possibleNext.add(current);
       while (!possibleNext.isEmpty()) {
-        state = possibleNext.iterator().next();
-        Object satisfied = evaluate(action.body);
-        checkBooleanOperand(action.name, satisfied);
-        if ((boolean)satisfied && state.isComplete()) confirmedNext.add(state);
-        possibleNext.remove(state);
+        Map<String, Object> trunk = possibleNext.iterator().next();
+        next = new HashMap<>(trunk);
+        Object satisfied = evaluate(action);
+        checkBooleanOperand(location, satisfied);
+        if ((boolean)satisfied && isComplete()) confirmedNext.add(next);
+        possibleNext.remove(trunk);
       }
     } finally {
-      possibleNext.clear();
-      state.clearNext();
+      clearNext();
     }
 
     return new ArrayList<>(confirmedNext);
@@ -83,7 +90,7 @@ class Interpreter implements Expr.Visitor<Object>,
       }
     }
 
-    if (state.isDeclared(stmt.name)) {
+    if (variables.containsKey(stmt.name.lexeme)) {
       throw new RuntimeError(stmt.name, "State variable redeclared as operator.");
     }
 
@@ -96,7 +103,8 @@ class Interpreter implements Expr.Visitor<Object>,
   public Void visitVarDeclStmt(Stmt.VarDecl stmt) {
     checkNotDefined(stmt.names);
     for (Token name : stmt.names) {
-      state.declareVariable(name);
+      variables.put(name.lexeme, name);
+      next.put(name.lexeme, new UnboundVariable(name));
     }
 
     return null;
@@ -106,24 +114,21 @@ class Interpreter implements Expr.Visitor<Object>,
   public Void visitPrintStmt(Stmt.Print stmt) {
     try {
       Object value = evaluate(stmt.expression);
-      if (!(value instanceof Boolean) || !state.isComplete()) {
+      if (!(value instanceof Boolean) || !isComplete()) {
         out.println(stringify(value));
         return null;
       }
     } finally {
-      state.clearNext();
+      next = new HashMap<>();
     }
 
-    Stmt.OpDef action = new Stmt.OpDef(stmt.location, new ArrayList<>(), stmt.expression);
-    List<State> nextStates = getNextStates(action, state);
+    List<Map<String, Object>> nextStates = getNextStates(stmt.location, stmt.expression);
 
     if (nextStates.size() == 0) {
       out.println(stringify(false));
     } else if (nextStates.size() == 1) {
       out.println(stringify(true));
-      out.println(state.toString());
-      state = nextStates.get(0);
-      state.step();
+      step(nextStates.get(0));
     } else {
       out.println(stringify(true));
       out.println("Select next state (number):");
@@ -134,10 +139,8 @@ class Interpreter implements Expr.Visitor<Object>,
       out.print("> ");
       try (java.util.Scanner in = new java.util.Scanner(System.in)) {
         int selection = in.nextInt();
-        state = nextStates.get(selection);
+        step(nextStates.get(selection));
       }
-      out.println(stringify(state.toString()));
-      state.step();
     }
 
     return null;
@@ -163,12 +166,12 @@ class Interpreter implements Expr.Visitor<Object>,
         checkSetOperand(expr.operator, right);
         if (left instanceof UnboundVariable) {
           UnboundVariable var = (UnboundVariable)left;
-          State current = state;
+          Map<String, Object> trunk = next;
           for (Object element : (Set<?>)right) {
-            state = new State(current);
-            state.bindValue(var, element);
+            next = new HashMap<>(trunk);
+            next.put(var.name().lexeme, element);
             left = element;
-            possibleNext.add(state);
+            possibleNext.add(next);
           }
         }
         checkIsDefined(left);
@@ -186,7 +189,7 @@ class Interpreter implements Expr.Visitor<Object>,
         if (left instanceof UnboundVariable) {
           UnboundVariable var = (UnboundVariable)left;
           checkIsDefined(right);
-          state.bindValue(var, right);
+          next.put(var.name().lexeme, right);
           return true;
         }
         checkIsDefined(left, right);
@@ -230,12 +233,12 @@ class Interpreter implements Expr.Visitor<Object>,
         return true;
       } case EXISTS: {
         boolean result = false;
-        State current = state;
+        Map<String, Object> trunk = next;
         for (Environment binding : bindings) {
-          state = new State(current);
+          next = new HashMap<>(trunk);
           Object junctResult = executeBlock(expr.body, binding);
           checkBooleanOperand(expr.op, junctResult);
-          possibleNext.add(state);
+          possibleNext.add(next);
           result |= (boolean)junctResult;
         }
         return result;
@@ -296,11 +299,16 @@ class Interpreter implements Expr.Visitor<Object>,
   @Override
   public Object visitUnaryExpr(Expr.Unary expr) {
     if (TokenType.PRIME == expr.operator.type) {
-      state.prime(expr.operator);
+      if (primed) {
+        throw new RuntimeError(expr.operator,
+            "Cannot double-prime expression nor prime initial state.");
+      }
+      
       try {
+        primed = true;
         return evaluate(expr.expr);
       } finally {
-        state.unprime();
+        primed = false;
       }
     }
 
@@ -355,12 +363,12 @@ class Interpreter implements Expr.Visitor<Object>,
         return true;
       case OR:
         boolean result = false;
-        State current = state;
+        Map<String, Object> trunk = next;
         for (Expr disjunct : expr.parameters) {
-          state = new State(current);
+          next = new HashMap<>(trunk);
           Object junctResult = evaluate(disjunct);
           checkBooleanOperand(expr.operator, junctResult);
-          possibleNext.add(state);
+          possibleNext.add(next);
           result |= (boolean)junctResult;
         }
         return result;
@@ -375,11 +383,30 @@ class Interpreter implements Expr.Visitor<Object>,
   }
 
   private Object getValue(Token name) {
-    if (state.isDeclared(name)) {
-      return state.getValue(name);
+    if (variables.containsKey(name.lexeme)) {
+      return (primed ? next : current).get(name.lexeme);
     }
 
     return environment.get(name);
+  }
+  
+  private boolean isComplete() {
+    return next.values().stream()
+        .noneMatch(v -> v instanceof UnboundVariable);
+  }
+  
+  private void clearNext() {
+    possibleNext.clear();
+    next = new HashMap<>();
+    for (Token variable : variables.values()) {
+      next.put(variable.lexeme, new UnboundVariable(variable));
+    }
+  }
+  
+  private void step(Map<String, Object> next) {
+    primed = false;
+    current = next;
+    this.next = next;
   }
 
   private void checkIsDefined(Object... operands) {
@@ -397,7 +424,7 @@ class Interpreter implements Expr.Visitor<Object>,
         throw new RuntimeError(name, "Identifier already in use.");
       }
 
-      if (state.isDeclared(name)) {
+      if (variables.containsKey(name.lexeme)) {
         throw new RuntimeError(name, "Name conflicts with state variable.");
       }
     }
