@@ -349,20 +349,120 @@ All we have to do is wire everything up; first, though, we need to think about n
 ===== Nondeterminism =====
 
 In TLA⁺, states generally do not have only one successor state.
-Instead, there are multiple possible states to transition to.
-This is called nondeterminism and is a key TLA⁺ feature enabling modeling of concurrent scheduling & much more.
+Instead, there are usually multiple possible states to transition to.
+This is called nondeterminism, and is a key TLA⁺ feature enabling modeling of concurrent scheduling & much more.
+Nondeterminism is expressed in TLA⁺ through the use of disjunction; for example:
+<code haskell>
+Action ==
+  \/ x' = 1
+  \/ x' = 2
+</code>
+The ''Action'' predicate matches next states where ''x'' is //either// 1 or 2.
+This means ''Action'' represents a nondeterministic step where the system can arbitrarily move to a state where ''x'' is 1, or a state where ''x'' is 2.
 
-We now introduce the concept of a partially-defined state, which is when not all variables have yet been bound to a concrete value.
-When all variables have been bound we say the state is complete.
-The initial state is complete if all variables have been bound in the current state; non-initial states are complete if all variables have been bound in the //next// state (implicitly, non-initial states have all variables bound in their current state).
-To avoid weird behavior we say that a state is only complete if it has at least one declared variable.
-Define the method ''isPartial()'' in the ''State'' class:
+Currently, we store the state in a single object in the ''Interpreter'' class.
+How can we represent & compute with multiple possible next states?
+The answer is to add another field to the ''Interpreter'' class, holding the set of identified possible next states:
+<code java [highlight_lines_extra="3"]>
+  private final PrintStream out;
+  private State state = new State();
+  private final Set<State> possibleNext = new HashSet<>();
+
+  public Interpreter(PrintStream out, boolean replMode) {
+</code>
+
+When our interpreter finds multiple possible next states, it tosses one of them into ''possibleNext'' for later consideration and continues evaluating & binding the variables in the current state.
+Then some top-level loop churns through the ''possibleNext'' set, either ruling out or accepting each possible next state until none remain.
+We will write this top-level loop now; create a new method ''getNextStates()'' in the ''Interpreter'' class:
 <code java>
-  boolean isPartial() {
-    Map<String, Object> binding = initialState ? current : next;
-    return binding.isEmpty() || binding.values().stream()
-        .anyMatch(v -> v instanceof UnboundVariable);
+  List<State> getNextStates(Stmt.OpDef action, State current) {
+    Set<State> confirmedNext = new HashSet<>();
+    try {
+      possibleNext.add(current);
+      while (!possibleNext.isEmpty()) {
+        state = possibleNext.iterator().next();
+        Object satisfied = evaluate(action.body);
+        checkBooleanOperand(action.name, satisfied);
+        if ((boolean)satisfied && state.isComplete()) confirmedNext.add(state);
+        possibleNext.remove(state);
+      }
+    } finally {
+      possibleNext.clear();
+      state.clearNext();
+    }
+
+    return new ArrayList<>(confirmedNext);
   }
 </code>
 
+This requires two additional methods in the ''State'' class: ''isComplete()'', and ''clearNext()''.
+A state is complete when it has at least one declared variable and all declared variables have been bound to concrete values in the next state:
+<code java>
+  boolean isComplete() {
+    return !variables.isEmpty() && next.values().stream()
+        .noneMatch(v -> v instanceof UnboundVariable);
+  }
+</code>
+
+The ''clearNext()'' method wipes out the values in ''next'', to avoid leaving the ''state'' field in an incomplete state:
+<code java>
+  void clearNext() {
+    for (Map.Entry<String, Token> var : variables.entrySet()) {
+      next.put(var.getKey(), new UnboundVariable(var.getValue(), true));
+    }
+  }
+</code>
+
+It's worth spending some time considering the ''getNextStates()'' method.
+From a pure functional perspective the approach is quite displeasing; our interpreter isn't just evaluating expressions anymore, it's also spewing out a bunch of half-baked states on the side.
+This side-effectful method makes it quite a bit harder to reason about the current state of our interpreter, but within the limitations of the Java language the method is appropriate.
+It is also consistent with what we are already doing with the ''environment'' and ''state'' fields.
+
+There is also the question of termination.
+What is preventing ''getNextStates()'' from entering an infinite loop?
+The answer (as we'll see) is that we only add a state to ''possibleNext'' if either it is //already// in ''possibleNext'' (in which case it is de-duplicated) or after binding the value of at least one more variable than is bound in the current state.
+Thus the number of variables bound to concrete values in ''possibleNext'' increases monotonically, eventually encompassing all declared variables and terminating the loop.
+
+Let's get concrete.
+How do we add states to ''possibleNext'' while evaluating disjunction?
+For each disjunct, we give ''state'' a copy of the current state, then evaluate the disjunct and add the resulting value of ''state'' to ''possibleNext''.
+As described above, this state will either be the same as the current state (so be de-duplicated) or have bound the value of at least one more state variable.
+We need to evaluate every disjunct to ensure we find all possible next states, which is why TLA⁺ disjunction does not short-circuit.
+Modify the ''OR'' handling code in ''visitVariadicExpr()'' as highlighted:
+<code java [highlight_lines_extra="3,5,8"]>
+      case OR:
+        boolean result = false;
+        State current = state;
+        for (Expr disjunct : expr.parameters) {
+          state = new State(current);
+          Object junctResult = evaluate(disjunct);
+          checkBooleanOperand(expr.operator, junctResult);
+          possibleNext.add(state);
+          result |= (boolean)junctResult;
+        }
+        return result;
+      default:
+</code>
+
+There's one other operator we will support for binding state variables: the set membership ''\in'' operator.
+Actions like ''x' \in {0, 1}'' are equivalent to ''x' = 0 \/ x' = 1''.
+Add the following code to the ''IN'' case in ''visitBinaryExpr()'':
+<code java [highlight_lines_extra="3,4,5,6,7,8,9,10,11,12,13"]>
+      case IN:
+        checkSetOperand(expr.operator, right);
+        if (left instanceof UnboundVariable) {
+          UnboundVariable var = (UnboundVariable)left;
+          State current = state;
+          for (Object element : (Set<?>)right) {
+            state = new State(current);
+            state.bindValue(var, element);
+            left = element;
+            possibleNext.add(state);
+          }
+        }
+        checkIsDefined(left);
+        return ((Set<?>)right).contains(left);
+</code>
+
+We can now generate possible next states by calling ''getNextStates()'' with an appropriate action!
 

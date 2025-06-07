@@ -42,22 +42,22 @@ class Interpreter implements Expr.Visitor<Object>,
           "Cannot use parameterized operator as top-level action.");
     }
 
-    Set<State> nextStates = new HashSet<>();
+    Set<State> confirmedNext = new HashSet<>();
     try {
       possibleNext.add(current);
       while (!possibleNext.isEmpty()) {
         state = possibleNext.iterator().next();
-        Object satisfies = evaluate(action.body);
-        checkBooleanOperand(action.name, satisfies);
-        if ((boolean)satisfies && !state.isPartial()) nextStates.add(state);
+        Object satisfied = evaluate(action.body);
+        checkBooleanOperand(action.name, satisfied);
+        if ((boolean)satisfied && state.isComplete()) confirmedNext.add(state);
         possibleNext.remove(state);
       }
     } finally {
       possibleNext.clear();
-      state.reset();
+      state.clearNext();
     }
 
-    return new ArrayList<>(nextStates);
+    return new ArrayList<>(confirmedNext);
   }
 
   Object executeBlock(Expr expr, Environment environment) {
@@ -106,12 +106,12 @@ class Interpreter implements Expr.Visitor<Object>,
   public Void visitPrintStmt(Stmt.Print stmt) {
     try {
       Object value = evaluate(stmt.expression);
-      if (!(value instanceof Boolean) || state.isPartial()) {
+      if (!(value instanceof Boolean) || !state.isComplete()) {
         out.println(stringify(value));
         return null;
       }
     } finally {
-      state.reset();
+      state.clearNext();
     }
 
     Stmt.OpDef action = new Stmt.OpDef(stmt.location, new ArrayList<>(), stmt.expression);

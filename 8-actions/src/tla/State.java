@@ -40,15 +40,14 @@ class State {
     return (primed ? next : current).get(name.lexeme);
   }
   
-  boolean isPartial() {
-    return next.isEmpty() || next.values().stream()
-        .anyMatch(v -> v instanceof UnboundVariable);
+  boolean isComplete() {
+    return !variables.isEmpty() && next.values().stream()
+        .noneMatch(v -> v instanceof UnboundVariable);
   }
 
-  void reset() {
-    Map<String, Object> binding = initialState ? current : next;
+  void clearNext() {
     for (Map.Entry<String, Token> var : variables.entrySet()) {
-      binding.put(var.getKey(), new UnboundVariable(var.getValue(), !initialState));
+      next.put(var.getKey(), new UnboundVariable(var.getValue(), true));
     }
   }
 
