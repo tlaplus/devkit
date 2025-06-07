@@ -50,7 +50,7 @@ class Interpreter implements Expr.Visitor<Object>,
   List<Map<String, Object>> getNextStates(Token location, Expr action) {
     Set<Map<String, Object>> confirmedNext = new HashSet<>();
     clearNext();
-    possibleNext.add(next);
+    possibleNext.add(new HashMap<>(next));
     try {
       while (!possibleNext.isEmpty()) {
         Map<String, Object> trunk = possibleNext.iterator().next();
@@ -58,6 +58,10 @@ class Interpreter implements Expr.Visitor<Object>,
         Object satisfied = evaluate(action);
         checkBooleanOperand(location, satisfied);
         if ((boolean)satisfied && isComplete()) confirmedNext.add(next);
+        possibleNext.contains(trunk);
+        for (var value : possibleNext) {
+          assert possibleNext.contains(value);
+        }
         possibleNext.remove(trunk);
       }
     } finally {
@@ -177,7 +181,7 @@ class Interpreter implements Expr.Visitor<Object>,
             next = new HashMap<>(trunk);
             next.put(var.name().lexeme, element);
             left = element;
-            possibleNext.add(next);
+            possibleNext.add(new HashMap<>(next));
           }
         }
         checkIsDefined(left);
@@ -246,7 +250,7 @@ class Interpreter implements Expr.Visitor<Object>,
           next = new HashMap<>(trunk);
           Object junctResult = executeBlock(expr.body, binding);
           checkBooleanOperand(expr.op, junctResult);
-          possibleNext.add(next);
+          possibleNext.add(new HashMap<>(next));
           result |= (boolean)junctResult;
         }
         return result;
@@ -375,7 +379,7 @@ class Interpreter implements Expr.Visitor<Object>,
           next = new HashMap<>(trunk);
           Object junctResult = evaluate(disjunct);
           checkBooleanOperand(expr.operator, junctResult);
-          possibleNext.add(next);
+          possibleNext.add(new HashMap<>(next));
           result |= (boolean)junctResult;
         }
         return result;

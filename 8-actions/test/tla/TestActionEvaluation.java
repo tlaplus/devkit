@@ -233,22 +233,4 @@ public class TestActionEvaluation {
         Map.of("x", 2, "y", true)
     );
   }
-
-  @Test
-  public void testWeirdBehavior() {
-    Set<Map<String, Object>> possibleNext = new HashSet<>();
-    possibleNext.add(Map.of("x", 3, "y", false));
-    possibleNext.add(Map.of("x", 2, "y", false));
-    possibleNext.add(Map.of("x", 1, "y", false));
-    possibleNext.add(Map.of("x", 0, "y", false));
-    Map<String, Object> source = possibleNext.iterator().next();
-    Map<String, Object> trunk = new HashMap<>(source);
-    Map<String, Object> next = new HashMap<>(trunk);
-    possibleNext.add(next);
-    possibleNext.add(Map.of("x", 2, "y", false));
-    possibleNext.add(Map.of("x", 1, "y", false));
-    possibleNext.add(Map.of("x", 0, "y", false));
-    assertTrue(possibleNext.remove(trunk));
-    assertEquals(3, possibleNext.size());
-  }
 }
