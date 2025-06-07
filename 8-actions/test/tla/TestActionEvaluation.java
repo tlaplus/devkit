@@ -4,12 +4,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -67,6 +71,42 @@ public class TestActionEvaluation {
   }
 
   @Test
+  public void testUninitializedVariableErrors() {
+    // Unary ops
+    assertNotEquals("", getRuntimeError("VARIABLE x -x"), "Uninitialized variable negative");
+    assertNotEquals("", getRuntimeError("VARIABLE x ~x"), "Uninitialized variable ~");
+
+    // Binary ops
+    assertNotEquals("", getRuntimeError("VARIABLE x x + 1"), "Uninitialized variable +");
+    assertNotEquals("", getRuntimeError("VARIABLE x x - 1"), "Uninitialized variable minus");
+    assertNotEquals("", getRuntimeError("VARIABLE x x .. 2"), "Uninitialized variable ..");
+    assertNotEquals("", getRuntimeError("VARIABLE x x < 2"), "Uninitialized variable <");
+    assertNotEquals("", getRuntimeError("VARIABLE x 2 \\in x"), "Uninitialized variable \\in");
+    assertNotEquals("", getRuntimeError("VARIABLE x 2 = x"), "Uninitialized variable =");
+
+    // Ternary ops
+    assertNotEquals("", getRuntimeError("VARIABLE x IF x THEN 0 ELSE 1"), "Uninitialized variable ITE");
+
+    // Variadic ops
+    assertNotEquals("", getRuntimeError("VARIABLE x {x}"), "Uninitialized variable {}");
+    assertNotEquals("", getRuntimeError("VARIABLE x {0, 1, x}"), "Uninitialized variable {}");
+    assertNotEquals("", getRuntimeError("VARIABLE x x /\\ TRUE"), "Uninitialized variable /\\");
+    assertNotEquals("", getRuntimeError("VARIABLE x x \\/ TRUE"), "Uninitialized variable \\/");
+
+    // Quantified functions
+    assertNotEquals("", getRuntimeError("VARIABLE x [n \\in x |-> n]"), "Uninitialized variable |-> set");
+    assertNotEquals("", getRuntimeError("VARIABLE x [n \\in {1} |-> x]"), "Uninitialized variable |-> body");
+    assertNotEquals("", getRuntimeError("VARIABLE x \\A n \\in x : TRUE"), "Uninitialized variable \\A set");
+    assertNotEquals("", getRuntimeError("VARIABLE x \\A n \\in {1} : x"), "Uninitialized variable \\A body");
+    assertNotEquals("", getRuntimeError("VARIABLE x \\E n \\in x : TRUE"), "Uninitialized variable \\E set");
+    assertNotEquals("", getRuntimeError("VARIABLE x \\E n \\in {1} : x"), "Uninitialized variable \\E body");
+
+    // Function application
+    assertNotEquals("", getRuntimeError("VARIABLE x x[0]"), "Uninitialized variable f[x] f");
+    assertNotEquals("", getRuntimeError("VARIABLE x [v \\in {0} |-> v][x]"), "Uninitialized variable f[x] x");
+  }
+
+  @Test
   public void testInitialStateGeneration() {
     List<Map<String, Object>> expected = Arrays.asList(Map.of("x", 5));
     assertEquals(expected, getNextStates("VARIABLE x I == x = 5", "I"));
@@ -106,6 +146,24 @@ public class TestActionEvaluation {
     assertEquals(expected, getNextStates("VARIABLES x, y I == x = 5 /\\ y = TRUE", "I"));
     expected = Arrays.asList(Map.of("x", true, "y", 1, "z", Map.of(0, 1, 1, 2, 2, 3)));
     assertEquals(expected, getNextStates("VARIABLES x, y, z I == x = TRUE /\\ y = 1 /\\ z = [n \\in 0 .. 2 |-> n + 1]", "I"));
+    expected = Arrays.asList(Map.of("x", 0, "y", 1), Map.of("x", 1, "y", 0));
+    String spec = """
+        VARIABLES x, y
+        Init ==
+          \\/ /\\ x = 0
+             /\\ y = 1
+          \\/ /\\ x = 1
+             /\\ y = 0
+        """;
+    assertEquals(expected, getNextStates(spec, "Init"));
+    spec = """
+        VARIABLES x, y
+        Init ==
+          /\\ x \\in {0, 1}
+          /\\ y \\in {0, 1}
+          /\\ ~(x = y)
+        """;
+    assertEquals(expected, getNextStates(spec, "Init"));
   }
 
   @Test
@@ -113,5 +171,84 @@ public class TestActionEvaluation {
     assertEquals(Arrays.asList(), getNextStates("VARIABLES x, y I == x = 5", "I"));
     assertEquals(Arrays.asList(), getNextStates("VARIABLES x, y I == y = TRUE", "I"));
     assertEquals(Arrays.asList(), getNextStates("VARIABLES x, y, z I == x = 5 /\\ z = TRUE", "I"));
+  }
+
+  @SafeVarargs
+  private static void isTrace(String input, Map<String, Object>... states) {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    Interpreter i = new Interpreter(new PrintStream(output), true);
+    i.interpret(parse(input));
+
+    boolean isInitialState = true;
+    Stmt.Print init = parseAction("Init");
+    Stmt.Print next = parseAction("Next");
+    for (Map<String, Object> state : states) {
+      List<Map<String, Object>> nextStates =
+          isInitialState
+          ? i.getNextStates(init.location, init.expression)
+          : i.getNextStates(next.location, next.expression);
+      isInitialState = false;
+      assertTrue(nextStates.contains(state), state.toString() + " not in " + nextStates.toString());
+      i.step(state);
+    }
+  }
+
+  @Test
+  public void testSingleVarTraces() {
+    String spec = """
+        VARIABLE x
+        Init == x = 0
+        Next == x' = x + 1
+        """;
+    isTrace(spec, Map.of("x", 0), Map.of("x", 1), Map.of("x", 2), Map.of("x", 3));
+
+    spec = """
+        VARIABLE t
+        Init == t \\in {0, 1}
+        Next == t' = 1 - t
+        """;
+    isTrace(spec, Map.of("t", 0), Map.of("t", 1), Map.of("t", 0), Map.of("t", 1));
+    isTrace(spec, Map.of("t", 1), Map.of("t", 0), Map.of("t", 1), Map.of("t", 0));
+  }
+
+  @Test
+  public void testMultiVarTraces() {
+    String spec = """
+        VARIABLES x, y
+        Init ==
+          /\\ x = 0
+          /\\ y = TRUE
+        Next ==
+          /\\ x' \\in 0 .. 3
+          /\\ y' = (~y)
+        """;
+    isTrace(
+        spec,
+        Map.of("x", 0, "y", true),
+        Map.of("x", 2, "y", false),
+        Map.of("x", 2, "y", true),
+        Map.of("x", 1, "y", false),
+        Map.of("x", 3, "y", true),
+        Map.of("x", 0, "y", false),
+        Map.of("x", 2, "y", true)
+    );
+  }
+
+  @Test
+  public void testWeirdBehavior() {
+    Set<Map<String, Object>> possibleNext = new HashSet<>();
+    possibleNext.add(Map.of("x", 3, "y", false));
+    possibleNext.add(Map.of("x", 2, "y", false));
+    possibleNext.add(Map.of("x", 1, "y", false));
+    possibleNext.add(Map.of("x", 0, "y", false));
+    Map<String, Object> source = possibleNext.iterator().next();
+    Map<String, Object> trunk = new HashMap<>(source);
+    Map<String, Object> next = new HashMap<>(trunk);
+    possibleNext.add(next);
+    possibleNext.add(Map.of("x", 2, "y", false));
+    possibleNext.add(Map.of("x", 1, "y", false));
+    possibleNext.add(Map.of("x", 0, "y", false));
+    assertTrue(possibleNext.remove(trunk));
+    assertEquals(3, possibleNext.size());
   }
 }

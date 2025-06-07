@@ -19,7 +19,7 @@ class Interpreter implements Expr.Visitor<Object>,
   private Map<String, Object> current = null;
   private Map<String, Object> next = new HashMap<>();
   private final Set<Map<String, Object>> possibleNext = new HashSet<>();
-  
+
   private record UnboundVariable(Token name) {
     @Override
     public String toString() {
@@ -65,6 +65,12 @@ class Interpreter implements Expr.Visitor<Object>,
     }
 
     return new ArrayList<>(confirmedNext);
+  }
+
+  void step(Map<String, Object> next) {
+    primed = false;
+    current = next;
+    this.next = next;
   }
 
   Object executeBlock(Expr expr, Environment environment) {
@@ -221,7 +227,9 @@ class Interpreter implements Expr.Visitor<Object>,
         Token param = expr.params.get(0);
         Map<Object, Object> function = new HashMap<>();
         for (Environment binding : bindings) {
-          function.put(binding.get(param), executeBlock(expr.body, binding));
+          Object value = executeBlock(expr.body, binding);
+          checkIsDefined(value);
+          function.put(binding.get(param), value);
         }
         return function;
       } case FOR_ALL: {
@@ -254,6 +262,7 @@ class Interpreter implements Expr.Visitor<Object>,
     Object function = evaluate(expr.fn);
     checkFunctionOperand(expr.paren, function);
     Object argument = evaluate(expr.argument);
+    checkIsDefined(argument);
     Map<?, ?> map = (Map<?, ?>)function;
     if (!map.containsKey(argument)) {
       throw new RuntimeError(expr.paren,
@@ -302,9 +311,7 @@ class Interpreter implements Expr.Visitor<Object>,
       if (primed) {
         throw new RuntimeError(expr.operator,
             "Cannot double-prime expression nor prime initial state.");
-      }
-      
-      try {
+      } try {
         primed = true;
         return evaluate(expr.expr);
       } finally {
@@ -389,24 +396,18 @@ class Interpreter implements Expr.Visitor<Object>,
 
     return environment.get(name);
   }
-  
+
   private boolean isComplete() {
     return next.values().stream()
         .noneMatch(v -> v instanceof UnboundVariable);
   }
-  
+
   private void clearNext() {
     possibleNext.clear();
     next = new HashMap<>();
     for (Token variable : variables.values()) {
       next.put(variable.lexeme, new UnboundVariable(variable));
     }
-  }
-  
-  private void step(Map<String, Object> next) {
-    primed = false;
-    current = next;
-    this.next = next;
   }
 
   private void checkIsDefined(Object... operands) {
