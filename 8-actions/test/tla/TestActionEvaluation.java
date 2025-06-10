@@ -9,11 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -231,6 +228,37 @@ public class TestActionEvaluation {
         Map.of("x", 3, "y", true),
         Map.of("x", 0, "y", false),
         Map.of("x", 2, "y", true)
+    );
+  }
+
+  @Test
+  public void testDisjunctionAndExistsTraces() {
+    String spec = """
+        VARIABLES x
+        Init ==
+          \\/ x = 0
+          \\/ x = 5
+        Next ==
+          /\\ \\E n \\in 0 .. 3 : x' = x + n
+        """;
+    isTrace(
+        spec,
+        Map.of("x", 5),
+        Map.of("x", 5),
+        Map.of("x", 6),
+        Map.of("x", 9),
+        Map.of("x", 12),
+        Map.of("x", 12)
+    );
+    isTrace(
+        spec,
+        Map.of("x", 0),
+        Map.of("x", 0),
+        Map.of("x", 0),
+        Map.of("x", 0),
+        Map.of("x", 3),
+        Map.of("x", 5),
+        Map.of("x", 6)
     );
   }
 }

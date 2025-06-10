@@ -58,10 +58,6 @@ class Interpreter implements Expr.Visitor<Object>,
         Object satisfied = evaluate(action);
         checkBooleanOperand(location, satisfied);
         if ((boolean)satisfied && isComplete()) confirmedNext.add(next);
-        possibleNext.contains(trunk);
-        for (var value : possibleNext) {
-          assert possibleNext.contains(value);
-        }
         possibleNext.remove(trunk);
       }
     } finally {
