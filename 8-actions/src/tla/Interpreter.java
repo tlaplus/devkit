@@ -18,7 +18,7 @@ class Interpreter implements Expr.Visitor<Object>,
   private final Map<String, Token> variables = new HashMap<>();
   private Map<String, Object> current = null;
   private Map<String, Object> next = new HashMap<>();
-  private final Set<Map<String, Object>> possibleNext = new HashSet<>();
+  private Set<Map<String, Object>> possibleNext = new HashSet<>();
 
   private record UnboundVariable(Token name) {
     @Override
@@ -307,32 +307,39 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object visitUnaryExpr(Expr.Unary expr) {
-    if (TokenType.PRIME == expr.operator.type) {
-      if (primed) {
-        throw new RuntimeError(expr.operator,
-            "Cannot double-prime expression nor prime initial state.");
-      } try {
-        primed = true;
-        return evaluate(expr.expr);
-      } finally {
-        primed = false;
-      }
-    }
-
-    Object operand = evaluate(expr.expr);
     switch (expr.operator.type) {
-      case ENABLED:
-        checkBooleanOperand(expr.operator, operand);
-        return (boolean)operand;
-      case NOT:
+      case PRIME: {
+        if (primed) {
+          throw new RuntimeError(expr.operator,
+              "Cannot double-prime expression nor prime initial state.");
+        } try {
+          primed = true;
+          return evaluate(expr.expr);
+        } finally {
+          primed = false;
+        }
+      } case ENABLED: {
+        Map<String, Object> oldNext = next;
+        Set<Map<String,Object>> oldPossibleNext = possibleNext;
+        try {
+          clearNext();
+          return !getNextStates(expr.operator, expr.expr).isEmpty();
+        } finally {
+          next = oldNext;
+          possibleNext = oldPossibleNext;
+        }
+      } case NOT: {
+        Object operand = evaluate(expr.expr);
         checkBooleanOperand(expr.operator, operand);
         return !(boolean)operand;
-      case MINUS:
+      } case MINUS: {
+        Object operand = evaluate(expr.expr);
         checkNumberOperand(expr.operator, operand);
         return -(int)operand;
-      default:
+      } default: {
         // Unreachable.
         return null;
+      }
     }
   }
 
@@ -403,7 +410,7 @@ class Interpreter implements Expr.Visitor<Object>,
   }
 
   private void clearNext() {
-    possibleNext.clear();
+    possibleNext = new HashSet<>();
     next = new HashMap<>();
     for (Token variable : variables.values()) {
       next.put(variable.lexeme, new UnboundVariable(variable));

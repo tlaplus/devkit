@@ -179,6 +179,7 @@ public class TestActionEvaluation {
     boolean isInitialState = true;
     Stmt.Print init = parseAction("Init");
     Stmt.Print next = parseAction("Next");
+    Stmt.Print inv = parseAction("Inv");
     for (Map<String, Object> state : states) {
       List<Map<String, Object>> nextStates =
           isInitialState
@@ -187,6 +188,7 @@ public class TestActionEvaluation {
       isInitialState = false;
       assertTrue(nextStates.contains(state), state.toString() + " not in " + nextStates.toString());
       i.step(state);
+      assertTrue((boolean)i.executeBlock(inv.expression, i.globals));
     }
   }
 
@@ -196,6 +198,7 @@ public class TestActionEvaluation {
         VARIABLE x
         Init == x = 0
         Next == x' = x + 1
+        Inv == x \\in 0 .. 3
         """;
     isTrace(spec, Map.of("x", 0), Map.of("x", 1), Map.of("x", 2), Map.of("x", 3));
 
@@ -203,6 +206,7 @@ public class TestActionEvaluation {
         VARIABLE t
         Init == t \\in {0, 1}
         Next == t' = 1 - t
+        Inv == Init
         """;
     isTrace(spec, Map.of("t", 0), Map.of("t", 1), Map.of("t", 0), Map.of("t", 1));
     isTrace(spec, Map.of("t", 1), Map.of("t", 0), Map.of("t", 1), Map.of("t", 0));
@@ -218,6 +222,9 @@ public class TestActionEvaluation {
         Next ==
           /\\ x' \\in 0 .. 3
           /\\ y' = (~y)
+        Inv ==
+          /\\ x \\in 0 .. 3
+          /\\ y \\in {TRUE, FALSE}
         """;
     isTrace(
         spec,
@@ -240,6 +247,7 @@ public class TestActionEvaluation {
           \\/ x = 5
         Next ==
           /\\ \\E n \\in 0 .. 3 : x' = x + n
+        Inv == x \\in 0 .. 15
         """;
     isTrace(
         spec,
@@ -259,6 +267,42 @@ public class TestActionEvaluation {
         Map.of("x", 3),
         Map.of("x", 5),
         Map.of("x", 6)
+    );
+  }
+  
+  @Test
+  public void testEnabled() {
+    String spec = """
+        VARIABLES x
+        Init == x = 0
+        Next == x' = x + 1
+        Inv == ENABLED Next
+        """;
+    isTrace(
+        spec,
+        Map.of("x", 0),
+        Map.of("x", 1),
+        Map.of("x", 2)
+    );
+  }
+  
+  @Test
+  public void testNotEnabled() {
+    String spec = """
+        VARIABLES x
+        Init == x = 0
+        Next ==
+          /\\ x < 3
+          /\\ x' = x + 1
+        Inv ==
+          \\/ x < 3 /\\ ENABLED Next
+          \\/ x = 3 /\\ ~ENABLED Next
+        """;
+    isTrace(
+        spec,
+        Map.of("x", 0),
+        Map.of("x", 1),
+        Map.of("x", 2)
     );
   }
 }
