@@ -108,7 +108,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
-import java.io.PrintStream;
 </code>
 
 Implement the ''Interpreter'' class visitor method for ''Expr.FnApply'':
@@ -241,17 +240,15 @@ For functions, we don't need to check arity because the single-argument restrict
 In [[https://craftinginterpreters.com/functions.html#native-functions|Section 10.2]] we learn how to implement primitive/native functions.
 We've already implemented all our native TLA⁺ functions in the //[[creating:evaluation|Evaluating Constant TLA⁺ Expressions]]// chapter, but we will follow along to add a crucial field to the ''Interpreter'' class: a global environment.
 Due to the ''replMode'' parameter we have to put the initialization logic in the constructor (new code highlighted):
-<code java [highlight_lines_extra="3,8,9"]>
+<code java [highlight_lines_extra="3,7,8"]>
 class Interpreter implements Expr.Visitor<Object>,
                              Stmt.Visitor<Void> {
   final Environment globals;
   private Environment environment;
-  private final PrintStream out;
 
-  public Interpreter(PrintStream out, boolean replMode) {
+  public Interpreter(boolean replMode) {
     this.globals = new Environment(replMode);
     this.environment = this.globals;
-    this.out = out;
   }
 </code>
 

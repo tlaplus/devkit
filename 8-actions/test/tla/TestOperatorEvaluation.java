@@ -10,7 +10,7 @@ public class TestOperatorEvaluation {
     try (IOCapture io = new IOCapture()) {
       Scanner s = new Scanner(input);
       Parser p = new Parser(s.scanTokens(), true);
-      Interpreter i = new Interpreter(System.out, true);
+      Interpreter i = new Interpreter(true);
       i.interpret(p.parse());
       return io.getOut().strip();
     }
@@ -20,7 +20,7 @@ public class TestOperatorEvaluation {
     try (IOCapture io = new IOCapture()) {
       Scanner s = new Scanner(input);
       Parser p = new Parser(s.scanTokens(), true);
-      Interpreter i = new Interpreter(System.out, true);
+      Interpreter i = new Interpreter(true);
       i.interpret(p.parse());
       return io.getErr();
     }

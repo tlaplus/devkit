@@ -34,7 +34,7 @@ public class TestActionEvaluation {
 
   private static List<Map<String, Object>> getNextStates(String input, String actionInput) {
     try (IOCapture io = new IOCapture()) {
-      Interpreter i = new Interpreter(System.out, true);
+      Interpreter i = new Interpreter(true);
       i.interpret(parse(input));
       Stmt.Print action = parseAction(actionInput);
       return i.getNextStates(action.location, action.expression);
@@ -45,7 +45,7 @@ public class TestActionEvaluation {
     try (IOCapture io = new IOCapture()) {
       Scanner s = new Scanner(input);
       Parser p = new Parser(s.scanTokens(), true);
-      Interpreter i = new Interpreter(System.out, true);
+      Interpreter i = new Interpreter(true);
       i.interpret(p.parse());
       return io.getErr();
     }
@@ -165,7 +165,7 @@ public class TestActionEvaluation {
   @SafeVarargs
   private static void isTrace(String input, Map<String, Object>... states) {
     try (IOCapture io = new IOCapture()) {
-      Interpreter i = new Interpreter(System.out, true);
+      Interpreter i = new Interpreter(true);
       i.interpret(parse(input));
 
       boolean isInitialState = true;

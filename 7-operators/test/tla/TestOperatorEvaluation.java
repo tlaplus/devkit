@@ -3,9 +3,6 @@ package tla;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-
 import org.junit.jupiter.api.Test;
 
 public class TestOperatorEvaluation {
@@ -13,25 +10,19 @@ public class TestOperatorEvaluation {
     try (IOCapture io = new IOCapture()) {
       Scanner s = new Scanner(input);
       Parser p = new Parser(s.scanTokens(), true);
-      Interpreter i = new Interpreter(System.out, true);
+      Interpreter i = new Interpreter(true);
       i.interpret(p.parse());
       return io.getOut().strip();
     }
   }
 
   private static String getRuntimeError(String input) {
-    Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens(), true);
-    ByteArrayOutputStream output = new ByteArrayOutputStream();
-    Interpreter i = new Interpreter(new PrintStream(output), true);
-    PrintStream stderr = System.err;
-    try {
-      ByteArrayOutputStream errOutput = new ByteArrayOutputStream();
-      System.setErr(new PrintStream(errOutput));
+    try (IOCapture io = new IOCapture()) {
+      Scanner s = new Scanner(input);
+      Parser p = new Parser(s.scanTokens(), true);
+      Interpreter i = new Interpreter(true);
       i.interpret(p.parse());
-      return errOutput.toString();
-    } finally {
-      System.setErr(stderr);
+      return io.getErr();
     }
   }
 

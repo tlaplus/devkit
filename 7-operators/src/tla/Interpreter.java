@@ -6,18 +6,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
-import java.io.PrintStream;
 
 class Interpreter implements Expr.Visitor<Object>,
                              Stmt.Visitor<Void> {
   final Environment globals;
   private Environment environment;
-  private final PrintStream out;
 
-  public Interpreter(PrintStream out, boolean replMode) {
+  public Interpreter(boolean replMode) {
     this.globals = new Environment(replMode);
     this.environment = this.globals;
-    this.out = out;
   }
 
   void interpret(List<Stmt> statements) {
@@ -65,7 +62,7 @@ class Interpreter implements Expr.Visitor<Object>,
   @Override
   public Void visitPrintStmt(Stmt.Print stmt) {
     Object value = evaluate(stmt.expression);
-    out.println(stringify(value));
+    System.out.println(stringify(value));
     return null;
   }
 

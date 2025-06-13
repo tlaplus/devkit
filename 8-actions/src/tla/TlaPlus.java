@@ -25,7 +25,7 @@ public class TlaPlus {
   }
 
   private static void runFile(String path) throws IOException {
-    interpreter = new Interpreter(System.out, false);
+    interpreter = new Interpreter(false);
     byte[] bytes = Files.readAllBytes(Paths.get(path));
     run(new String(bytes, StandardCharsets.UTF_8), false);
 
@@ -35,7 +35,7 @@ public class TlaPlus {
   }
 
   private static void runPrompt() throws IOException {
-    interpreter = new Interpreter(System.out, true);
+    interpreter = new Interpreter(true);
     InputStreamReader input = new InputStreamReader(System.in);
     BufferedReader reader = new BufferedReader(input);
 

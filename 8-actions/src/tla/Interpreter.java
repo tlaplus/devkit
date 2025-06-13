@@ -6,13 +6,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
-import java.io.PrintStream;
 
 class Interpreter implements Expr.Visitor<Object>,
                              Stmt.Visitor<Void> {
   final Environment globals;
   private Environment environment;
-  private final PrintStream out;
 
   private boolean primed = true;
   private final Map<String, Token> variables = new HashMap<>();
@@ -27,10 +25,9 @@ class Interpreter implements Expr.Visitor<Object>,
     }
   }
 
-  public Interpreter(PrintStream out, boolean replMode) {
+  public Interpreter(boolean replMode) {
     this.globals = new Environment(replMode);
     this.environment = this.globals;
-    this.out = out;
   }
 
   void interpret(List<Stmt> statements) {
@@ -121,7 +118,7 @@ class Interpreter implements Expr.Visitor<Object>,
     try {
       Object value = evaluate(stmt.expression);
       if (!(value instanceof Boolean) || !isComplete()) {
-        out.println(stringify(value));
+        System.out.println(stringify(value));
         return null;
       }
     } finally {
@@ -131,18 +128,18 @@ class Interpreter implements Expr.Visitor<Object>,
     List<Map<String, Object>> nextStates = getNextStates(stmt.location, stmt.expression);
 
     if (nextStates.size() == 0) {
-      out.println(stringify(false));
+      System.out.println(stringify(false));
     } else if (nextStates.size() == 1) {
-      out.println(stringify(true));
+      System.out.println(stringify(true));
       step(nextStates.get(0));
     } else {
-      out.println(stringify(true));
-      out.println("Select next state (number):");
+      System.out.println(stringify(true));
+      System.out.println("Select next state (number):");
       for (int i = 0; i < nextStates.size(); i++) {
-        out.println(i + ":");
-        out.println(nextStates.get(i));
+        System.out.println(i + ":");
+        System.out.println(nextStates.get(i));
       }
-      out.print("> ");
+      System.out.print("> ");
       try (java.util.Scanner in = new java.util.Scanner(System.in)) {
         int selection = in.nextInt();
         step(nextStates.get(selection));
