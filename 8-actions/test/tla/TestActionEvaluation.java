@@ -6,8 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -35,27 +33,21 @@ public class TestActionEvaluation {
   }
 
   private static List<Map<String, Object>> getNextStates(String input, String actionInput) {
-    ByteArrayOutputStream output = new ByteArrayOutputStream();
-    Interpreter i = new Interpreter(new PrintStream(output), true);
-    i.interpret(parse(input));
-
-    Stmt.Print action = parseAction(actionInput);
-    return i.getNextStates(action.location, action.expression);
+    try (IOCapture io = new IOCapture()) {
+      Interpreter i = new Interpreter(System.out, true);
+      i.interpret(parse(input));
+      Stmt.Print action = parseAction(actionInput);
+      return i.getNextStates(action.location, action.expression);
+    }
   }
 
   private static String getRuntimeError(String input) {
-    Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens(), true);
-    ByteArrayOutputStream output = new ByteArrayOutputStream();
-    Interpreter i = new Interpreter(new PrintStream(output), true);
-    PrintStream stderr = System.err;
-    try {
-      ByteArrayOutputStream errOutput = new ByteArrayOutputStream();
-      System.setErr(new PrintStream(errOutput));
+    try (IOCapture io = new IOCapture()) {
+      Scanner s = new Scanner(input);
+      Parser p = new Parser(s.scanTokens(), true);
+      Interpreter i = new Interpreter(System.out, true);
       i.interpret(p.parse());
-      return errOutput.toString();
-    } finally {
-      System.setErr(stderr);
+      return io.getErr();
     }
   }
 
@@ -172,23 +164,24 @@ public class TestActionEvaluation {
 
   @SafeVarargs
   private static void isTrace(String input, Map<String, Object>... states) {
-    ByteArrayOutputStream output = new ByteArrayOutputStream();
-    Interpreter i = new Interpreter(new PrintStream(output), true);
-    i.interpret(parse(input));
+    try (IOCapture io = new IOCapture()) {
+      Interpreter i = new Interpreter(System.out, true);
+      i.interpret(parse(input));
 
-    boolean isInitialState = true;
-    Stmt.Print init = parseAction("Init");
-    Stmt.Print next = parseAction("Next");
-    Stmt.Print inv = parseAction("Inv");
-    for (Map<String, Object> state : states) {
-      List<Map<String, Object>> nextStates =
-          isInitialState
-          ? i.getNextStates(init.location, init.expression)
-          : i.getNextStates(next.location, next.expression);
-      isInitialState = false;
-      assertTrue(nextStates.contains(state), state.toString() + " not in " + nextStates.toString());
-      i.step(state);
-      assertTrue((boolean)i.executeBlock(inv.expression, i.globals));
+      boolean isInitialState = true;
+      Stmt.Print init = parseAction("Init");
+      Stmt.Print next = parseAction("Next");
+      Stmt.Print inv = parseAction("Inv");
+      for (Map<String, Object> state : states) {
+        List<Map<String, Object>> nextStates =
+            isInitialState
+            ? i.getNextStates(init.location, init.expression)
+            : i.getNextStates(next.location, next.expression);
+        isInitialState = false;
+        assertTrue(nextStates.contains(state), state.toString() + " not in " + nextStates.toString());
+        i.step(state);
+        assertTrue((boolean)i.executeBlock(inv.expression, i.globals));
+      }
     }
   }
 

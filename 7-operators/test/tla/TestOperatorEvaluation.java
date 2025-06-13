@@ -10,12 +10,13 @@ import org.junit.jupiter.api.Test;
 
 public class TestOperatorEvaluation {
   private static String interpret(String input) {
-    Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens(), true);
-    ByteArrayOutputStream output = new ByteArrayOutputStream();
-    Interpreter i = new Interpreter(new PrintStream(output), true);
-    i.interpret(p.parse());
-    return output.toString().strip();
+    try (IOCapture io = new IOCapture()) {
+      Scanner s = new Scanner(input);
+      Parser p = new Parser(s.scanTokens(), true);
+      Interpreter i = new Interpreter(System.out, true);
+      i.interpret(p.parse());
+      return io.getOut().strip();
+    }
   }
 
   private static String getRuntimeError(String input) {

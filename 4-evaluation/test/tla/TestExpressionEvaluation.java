@@ -2,24 +2,16 @@ package tla;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-
 import org.junit.jupiter.api.Test;
 
 public class TestExpressionEvaluation {
   private static String interpret(String input) {
-    Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens());
-    Interpreter i = new Interpreter();
-    PrintStream old = System.out;
-    try {
-      ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-      System.setOut(new PrintStream(byteStream));
+    try (IOCapture io = new IOCapture()) {
+      Scanner s = new Scanner(input);
+      Parser p = new Parser(s.scanTokens());
+      Interpreter i = new Interpreter();
       i.interpret(p.parse());
-      return byteStream.toString().strip();
-    } finally {
-      System.setOut(old);
+      return io.getOut().strip();
     }
   }
 
