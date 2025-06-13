@@ -269,7 +269,7 @@ public class TestActionEvaluation {
         Map.of("x", 6)
     );
   }
-  
+
   @Test
   public void testEnabled() {
     String spec = """
@@ -285,7 +285,7 @@ public class TestActionEvaluation {
         Map.of("x", 2)
     );
   }
-  
+
   @Test
   public void testNotEnabled() {
     String spec = """
