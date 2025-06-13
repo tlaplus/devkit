@@ -70,7 +70,6 @@ We'll return to this method later to add parsing logic for operator definitions.
 ===== Executing statements =====
 
 Add ''Stmt'' to the list of interfaces implemented by the ''Interpreter'' class:
-
 <code java [highlight_lines_extra="2"]>
 class Interpreter implements Expr.Visitor<Object>,
                              Stmt.Visitor<Void> {
@@ -78,34 +77,18 @@ class Interpreter implements Expr.Visitor<Object>,
 </code>
 
 Now add a visitor method for the ''Stmt.Print'' class, after ''evaluate()'' in the ''Interpreter'' class.
-This is identical to the book except for one thing, which we will change to improve the testability of our interpreter:
-
-<code java [highlight_lines_extra="4"]>
+This is identical to the book:
+<code java>
   @Override
   public Void visitPrintStmt(Stmt.Print stmt) {
     Object value = evaluate(stmt.expression);
-    out.println(stringify(value));
+    System.out.println(stringify(value));
     return null;
-  }
-</code>
-
-Instead of printing directly to ''System.out'', we add a ''[[https://docs.oracle.com/javase/8/docs/api/java/io/PrintStream.html|PrintStream]]'' field to the ''Interpreter'' class called ''out''.
-''System.out'' implements the ''PrintStream'' interface, but so do other things, and if we want to write unit tests for this class it helps to be able to intercept its output.
-Add a constructor for the ''Interpreter'' class along with the field; also add a ''replMode'' parameter, although don't make use of it just yet:
-
-<code java [highlight_lines_extra="3,5,6,7"]>
-class Interpreter implements Expr.Visitor<Object>,
-                             Stmt.Visitor<Void> {
-  private final PrintStream out;
-
-  public Interpreter(PrintStream out, boolean replMode) {
-    this.out = out;
   }
 </code>
 
 Same as the book, modify the old ''interpret()'' method to accept a list of statements.
 The changed method is identical to the book except for using ''TlaPlus'' instead of ''Lox'':
-
 <code java [highlight_lines_extra="7"]>
   void interpret(List<Stmt> statements) {
     try {
@@ -119,22 +102,19 @@ The changed method is identical to the book except for using ''TlaPlus'' instead
 </code>
 
 Also add the ''execute()'' helper method to the ''Interpreter'' class:
-
 <code java>
   private void execute(Stmt stmt) {
     stmt.accept(this);
   }
 </code>
 
-At the top of ''Interpreter.java'', import the classes we're now using:
-
-<code java [highlight_lines_extra="5,6"]>
+At the top of ''Interpreter.java'', add an import for the ''List'' class that is now being used by ''interpret()'':
+<code java [highlight_lines_extra="5"]>
 package tla;
 
 import java.util.Set;
 import java.util.HashSet;
 import java.util.List;
-import java.io.PrintStream;
 </code>
 
 ===== Updating the main method =====
@@ -153,8 +133,7 @@ Parameterize the ''run()'' method with a ''replMode'' argument, propagate it to 
     // Stop if there was a syntax error.
 </code>
 
-Then replace the call to the interpreter with this:
-
+Still in ''run()'', replace the call to the interpreter with this:
 <code java [highlight_lines_extra="3"]>
     if (hadError) return;
 
@@ -175,7 +154,7 @@ Then modify the ''runFile()'' method as follows:
 
 <code java [highlight_lines_extra="2,4"]>
   private static void runFile(String path) throws IOException {
-    interpreter = new Interpreter(System.out, false);
+    interpreter = new Interpreter(false);
     byte[] bytes = Files.readAllBytes(Paths.get(path));
     run(new String(bytes, StandardCharsets.UTF_8), false);
 </code>
@@ -184,7 +163,7 @@ Similarly modify the ''runPrompt'' method:
 
 <code java [highlight_lines_extra="2,10"]>
   private static void runPrompt() throws IOException {
-    interpreter = new Interpreter(System.out, true);
+    interpreter = new Interpreter(true);
     InputStreamReader input = new InputStreamReader(System.in);
     BufferedReader reader = new BufferedReader(input);
 
@@ -195,6 +174,14 @@ Similarly modify the ''runPrompt'' method:
       run(line, true);
       hadError = false;
     }
+  }
+</code>
+
+We just used an ''Interpreter'' constructor accepting a parameter indicating whether we're operating in REPL mode.
+Write that constructor now, although don't yet do anything with the parameter:
+<code Java>
+  public Interpreter(boolean replMode) {
+
   }
 </code>
 
@@ -385,28 +372,23 @@ Our ''get()'' method is unchanged from the book:
 </code>
 
 Now add an ''Environment'' instance as a field of your ''Interpreter'' class; here's where we make use of the ''replMode'' constructor parameter we added up above:
-
-<code java [highlight_lines_extra="3,7"]>
+<code java [highlight_lines_extra="3,6"]>
 class Interpreter implements Expr.Visitor<Object>,
                              Stmt.Visitor<Void> {
   private Environment environment;
-  private final PrintStream out;
 
-  public Interpreter(PrintStream out, boolean replMode) {
+  public Interpreter(boolean replMode) {
     this.environment = new Environment(replMode);
-    this.out = out;
   }
 </code>
 
-Now add a visitor method in the ''Interpreter'' class for the ''Expr.Variable'' class, which retrieves the value of the variable from the environment:
-
+Add a visitor method in the ''Interpreter'' class for the ''Expr.Variable'' class, which retrieves the value of the variable from the environment:
 <code java>
   @Override
   public Object visitVariableExpr(Expr.Variable expr) {
     return environment.get(expr.name);
   }
 </code>
-
 
 ====== Section 8.4: Assignment ======
 
@@ -466,7 +448,7 @@ If your code got out of sync during this tutorial, you can find a snapshot of it
 
 ====== Section 8.5: Challenges ======
 
-  - Write some unit tests for your interpreter. Use a ''[[https://docs.oracle.com/javase/8/docs/api/java/io/ByteArrayOutputStream.html|ByteArrayOutputStream]]'' instance as a parameter to the ''PrintStream'' constructor, then pass your ''PrintStream'' instance into the ''Interpreter'' class to capture its output.
+  - Write some unit tests for your interpreter. Capture the ''System.out'' output; use the ''[[https://docs.oracle.com/javase/8/docs/api/java/lang/System.html#setOut-java.io.PrintStream-|System.setOut()]]'' method with a ''[[https://docs.oracle.com/javase/8/docs/api/java/io/PrintStream.html|PrintStream]]'' instance constructed using a ''[[https://docs.oracle.com/javase/8/docs/api/java/io/ByteArrayOutputStream.html|ByteArrayOutputStream]]''.
   - The ''isAtOpDefStart()'' and ''operatorDefinition()'' methods have some duplicated logic that will only grow more involved when we add operator parameter support. Can you find a way to factor out this logic into a single method?
 
 [[creating:evaluation|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:jlists|Next Page >]]
