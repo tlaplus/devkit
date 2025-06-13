@@ -11,15 +11,17 @@ import org.junit.jupiter.api.Test;
 public class TestJLists {
 
   private static void checkEqual(String input, String expected) {
-    input = "op ==\n" + input;
-    Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens(), false);
-    List<Stmt> statements = p.parse();
-    for (Stmt statement : statements) {
-      assertNotNull(statement, input);
+    try (IOCapture io = new IOCapture()) {
+      input = "op ==\n" + input;
+      Scanner s = new Scanner(input);
+      Parser p = new Parser(s.scanTokens(), false);
+      List<Stmt> statements = p.parse();
+      for (Stmt statement : statements) {
+        assertNotNull(statement, input);
+      }
+      String actual = new AstPrinter().print(statements);
+      assertEquals("(op " + expected + ")", actual, input);
     }
-    String actual = new AstPrinter().print(statements);
-    assertEquals("(op " + expected + ")", actual, input);
   }
 
   @Test
@@ -375,11 +377,13 @@ public class TestJLists {
         )
           /\\ 3
         """;
-    Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens(), false);
-    List<Stmt> statements = p.parse();
-    for (Stmt statement : statements) {
-      assertNull(statement, input);
+    try (IOCapture io = new IOCapture()) {
+      Scanner s = new Scanner(input);
+      Parser p = new Parser(s.scanTokens(), false);
+      List<Stmt> statements = p.parse();
+      for (Stmt statement : statements) {
+        assertNull(statement, input);
+      }
     }
   }
 }

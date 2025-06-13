@@ -6,10 +6,12 @@ import org.junit.jupiter.api.Test;
 public class TestOperatorParsing {
 
   private static void checkEqual(boolean replMode, String input, String expected) {
-    Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens(), replMode);
-    String actual = new AstPrinter().print(p.parse());
-    assertEquals(expected, actual);
+    try (IOCapture io = new IOCapture()) {
+      Scanner s = new Scanner(input);
+      Parser p = new Parser(s.scanTokens(), replMode);
+      String actual = new AstPrinter().print(p.parse());
+      assertEquals(expected, actual);
+    }
   }
 
   @Test

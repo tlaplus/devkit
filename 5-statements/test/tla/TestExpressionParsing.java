@@ -7,16 +7,20 @@ import org.junit.jupiter.api.Test;
 public class TestExpressionParsing {
 
   private static void checkEqual(String input, String expected) {
-    Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens(), true);
-    String actual = new AstPrinter().print(p.parse());
-    assertEquals("(print " + expected + ")", actual);
+    try (IOCapture io = new IOCapture()) {
+      Scanner s = new Scanner(input);
+      Parser p = new Parser(s.scanTokens(), true);
+      String actual = new AstPrinter().print(p.parse());
+      assertEquals("(print " + expected + ")", actual);
+    }
   }
 
   private static void checkError(String input) {
-    Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens(), true);
-    assertNull(p.parse().get(0));
+    try (IOCapture io = new IOCapture()) {
+      Scanner s = new Scanner(input);
+      Parser p = new Parser(s.scanTokens(), true);
+      assertNull(p.parse().get(0));
+    }
   }
 
   @Test
