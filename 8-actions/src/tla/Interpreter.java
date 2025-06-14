@@ -115,37 +115,8 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Void visitPrintStmt(Stmt.Print stmt) {
-    try {
-      Object value = evaluate(stmt.expression);
-      if (!(value instanceof Boolean) || !isComplete()) {
-        System.out.println(stringify(value));
-        return null;
-      }
-    } finally {
-      next = new HashMap<>();
-    }
-
-    List<Map<String, Object>> nextStates = getNextStates(stmt.location, stmt.expression);
-
-    if (nextStates.size() == 0) {
-      System.out.println(stringify(false));
-    } else if (nextStates.size() == 1) {
-      System.out.println(stringify(true));
-      step(nextStates.get(0));
-    } else {
-      System.out.println(stringify(true));
-      System.out.println("Select next state (number):");
-      for (int i = 0; i < nextStates.size(); i++) {
-        System.out.println(i + ":");
-        System.out.println(nextStates.get(i));
-      }
-      System.out.print("> ");
-      try (java.util.Scanner in = new java.util.Scanner(System.in)) {
-        int selection = in.nextInt();
-        step(nextStates.get(selection));
-      }
-    }
-
+    Object value = evaluate(stmt.expression);
+    System.out.println(stringify(value));
     return null;
   }
 

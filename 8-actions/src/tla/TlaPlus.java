@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 
 public class TlaPlus {
   private static Interpreter interpreter;
@@ -59,7 +60,39 @@ public class TlaPlus {
     if (hadError) return;
 
     System.out.println(new AstPrinter().print(statements));
-    interpreter.interpret(statements);
+    if (replMode && statements.size() == 1
+        && statements.get(0) instanceof Stmt.Print) {
+      tryInteractiveStep((Stmt.Print)statements.get(0));
+    } else {
+      interpreter.interpret(statements);
+    }
+  }
+
+  private static void tryInteractiveStep(Stmt.Print action) {
+    Object result = interpreter.executeBlock(action.expression, interpreter.globals);
+    if (!(result instanceof Boolean)) {
+      action.accept(interpreter);
+      return;
+    }
+
+    List<Map<String, Object>> nextStates =
+        interpreter.getNextStates(action.location, action.expression);
+    if (nextStates.isEmpty()) {
+      action.accept(interpreter);
+    } else if (nextStates.size() == 1) {
+      interpreter.step(nextStates.get(0));
+    } else {
+      System.out.print("Select next state (number): ");
+      for (int i = 0; i < nextStates.size(); i++) {
+        System.out.println(i + ":");
+        System.out.println(nextStates.get(i));
+      }
+      System.out.print("> ");
+      try (java.util.Scanner in = new java.util.Scanner(System.in)) {
+        int selection = in.nextInt();
+        interpreter.step(nextStates.get(selection));
+      }
+    }
   }
 
   static void error(int line, String message) {
