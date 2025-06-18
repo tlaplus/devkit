@@ -193,23 +193,23 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object visitUnaryExpr(Expr.Unary expr) {
-    Object operand = evaluate(expr.expr);
-
     switch (expr.operator.type) {
-      case PRIME:
-        return operand;
-      case ENABLED:
-        checkBooleanOperand(expr.operator, operand);
-        return (boolean)operand;
-      case NOT:
+      case PRIME: {
+        return evaluate(expr.expr);
+      } case ENABLED: {
+        return false;
+      } case NOT: {
+        Object operand = evaluate(expr.expr);
         checkBooleanOperand(expr.operator, operand);
         return !(boolean)operand;
-      case MINUS:
+      } case MINUS: {
+        Object operand = evaluate(expr.expr);
         checkNumberOperand(expr.operator, operand);
         return -(int)operand;
-      default:
+      } default: {
         // Unreachable.
         return null;
+      }
     }
   }
 

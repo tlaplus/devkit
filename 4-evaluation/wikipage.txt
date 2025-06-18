@@ -64,23 +64,36 @@ This uses the ''evaluate()'' helper method; add it to the ''Interpreter'' class:
 
 ==== Evaluating Unary Operators ====
 
-Our first real difference is in the ''visitUnaryExpr()'' method.
+Our first real difference from the book is in the ''visitUnaryExpr()'' method.
 Recall that since our ''Expr.Unary'' type represents both prefix and suffix operators, we don't call its parameter ''right'' as in the book.
-Here's how we define the negative prefix operator, casting the parameter to an ''int'' instead of a ''double'' (highlighted lines differ from book):
-
-<code java [highlight_lines_extra="3,7"]>
+We also don't pre-emptively evaluate the inner expression at the top of the method; this is important for when we later fully implement the prime and enabled operators.
+The method is structured as a switch statement handling all possible unary operators:
+<code java>
   @Override
   public Object visitUnaryExpr(Expr.Unary expr) {
-    Object operand = evaluate(expr.expr);
-
     switch (expr.operator.type) {
-      case MINUS:
-        return -(int)operand;
-    }
+      case PRIME: {
 
-    // Unreachable.
-    return null;
+      } case ENABLED: {
+
+      } case NOT: {
+
+      } case MINUS: {
+
+      } default: {
+        // Unreachable.
+        return null;
+      }
+    }
   }
+</code>
+
+Here's how we define the negative prefix operator; while the book casts the operand to a ''double'', here we cast it to an ''int'':
+<code java [highlight_lines_extra="2,3"]>
+      } case MINUS: {
+        Object operand = evaluate(expr.expr);
+        return -(int)operand;
+      } default: {
 </code>
 
 Note that the negative prefix operator is not actually a built-in operator of TLA⁺.
@@ -89,42 +102,31 @@ However, because our minimal TLA⁺ language subset lacks module importing, for 
 You can find more information about the built-in TLA⁺ operators in chapter 16 of //[[https://lamport.azurewebsites.net/tla/book.html|Specifying Systems]]// by Leslie Lamport, or [[https://github.com/tlaplus/tlaplus/blob/13e5a39b5368a6da4906b8ed1c2c1114d2e7de15/tlatools/org.lamport.tlatools/src/tla2sany/semantic/BuiltInOperators.java#L80-L153|this SANY source file]].
 
 Our logical-not prefix operator is denoted by the ''NOT'' token type instead of ''BANG'' as in Lox.
-We also have no use for the ''isTruthy()'' helper method, since TLA⁺ is quite strict: only Boolean values can be given to Boolean operators!
-Add this code to the ''visitUnaryExpr()'' method:
-
+We also have no use for the ''isTruthy()'' helper method from the book, since TLA⁺ is quite strict: only Boolean values can be given to Boolean operators!
+Add this code to ''visitUnaryExpr()'':
 <code java [highlight_lines_extra="2,3"]>
-    switch (expr.operator.type) {
-      case NOT:
+      } case NOT: {
+        Object operand = evaluate(expr.expr);
         return !(boolean)operand;
-      case MINUS:
+      } case MINUS: {
 </code>
 
 We still have two more unary operators to define: ''ENABLED'', and the prime operator.
 Both are trivial in this domain but will become much more complicated later on.
-For constant expressions, ''ENABLED'' is true if and only if the expression itself is true.
-Add the highlighted code to the ''visitUnaryExpr()'' method:
-
-<code java [highlight_lines_extra="2,3"]>
-    switch (expr.operator.type) {
-      case ENABLED:
-        return (boolean)operand;
-      case NOT:
-</code>
-
-Priming a constant expression has no effect on the value of that expression, so just return the operand's value:
-
-<code java [highlight_lines_extra="2,3"]>
-    switch (expr.operator.type) {
-      case PRIME:
-        return operand;
-      case ENABLED:
+For constant expressions, ''ENABLED'' is always false and prime is just whatever the inner expression evaluates to.
+Add the highlighted code to ''visitUnaryExpr()'':
+<code java [highlight_lines_extra="2,4"]>
+      case PRIME: {
+        return evaluate(expr.expr);
+      } case ENABLED: {
+        return false;
+      } case NOT: {
 </code>
 
 ==== Evaluating Binary Operators ====
 
 Unlike Lox, addition in TLA⁺ is only defined between two numbers (at least in its standard ''Integers'' module definition).
-Here's how we define our basic binary arithmetic & comparison operators; add a ''visitBinaryExpr()'' method in the ''Interpreter'' class:
-
+Here's how we define our basic binary arithmetic & comparison operators; add a ''visitBinaryExpr()'' method in the ''Interpreter'' class (highlighted code differs from the book):
 <code java [highlight_lines_extra="8,9,10,11,12,13,14"]>
   @Override
   public Object visitBinaryExpr(Expr.Binary expr) {
@@ -239,7 +241,7 @@ Finally, here's how we define the set construction operator; add this ''visitVar
 
 In [[https://craftinginterpreters.com/evaluating-expressions.html#runtime-errors|section 7.3]] we add some error detection & reporting to our interpreter code.
 
-Here's our variant of the ''checkNumberOperand()'' and ''checkNumberOperands()'' methods given in the book, using ''Integer'' instead of ''Double''; put these in the ''Interpreter'' class:
+Here's our variant of the ''checkNumberOperand()'' and ''checkNumberOperands()'' methods given in the book, using ''Integer'' instead of ''Double''; put these in the ''Interpreter'' class (highlighted code differs from the book):
 
 <code java [highlight_lines_extra="2,8"]>
   private void checkNumberOperand(Token operator, Object operand) {
@@ -291,22 +293,20 @@ Finally, we need a helper for checking whether an operand is a set:
 
 Now add these checks to our interpreter code.
 Here's negative:
-<code java [highlight_lines_extra="2"]>
-      case MINUS:
+<code java [highlight_lines_extra="3"]>
+      } case MINUS: {
+        Object operand = evaluate(expr.expr);
         checkNumberOperand(expr.operator, operand);
         return -(int)operand;
+      } default: {
 </code>
 Logical not:
-<code java [highlight_lines_extra="2"]>
-      case NOT:
+<code java [highlight_lines_extra="3"]>
+      } case NOT: {
+        Object operand = evaluate(expr.expr);
         checkBooleanOperand(expr.operator, operand);
         return !(boolean)operand;
-</code>
-Enabled:
-<code java [highlight_lines_extra="2"]>
-      case ENABLED:
-        checkBooleanOperand(expr.operator, operand);
-        return (boolean)operand;
+      } case MINUS: {
 </code>
 Subtraction:
 <code java [highlight_lines_extra="2"]>

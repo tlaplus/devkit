@@ -27,7 +27,7 @@ public class TestExpressionEvaluation {
     assertEquals("false", interpret("~TRUE"));
     assertEquals("true", interpret("\\lnot FALSE"));
     assertEquals("false", interpret("\\neg TRUE"));
-    assertEquals("true", interpret("ENABLED TRUE"));
+    assertEquals("false", interpret("ENABLED TRUE"));
     assertEquals("false", interpret("ENABLED FALSE"));
     assertEquals("-4", interpret("-4"));
     assertEquals("0", interpret("-0"));
