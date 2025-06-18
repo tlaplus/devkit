@@ -44,6 +44,10 @@ class Interpreter implements Expr.Visitor<Object>,
     stmt.accept(this);
   }
 
+  Map<String, Object> getCurrentState() {
+    return new HashMap<>(current);
+  }
+
   List<Map<String, Object>> getNextStates(Token location, Expr action) {
     Set<Map<String, Object>> confirmedNext = new HashSet<>();
     clearNext();

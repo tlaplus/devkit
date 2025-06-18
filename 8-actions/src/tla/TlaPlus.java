@@ -81,17 +81,22 @@ public class TlaPlus {
       action.accept(interpreter);
     } else if (nextStates.size() == 1) {
       interpreter.step(nextStates.get(0));
+      System.out.println(true);
+      System.out.println(interpreter.getCurrentState());
     } else {
-      System.out.print("Select next state (number): ");
+      System.out.println(true);
+      System.out.println("Select next state (enter number): ");
       for (int i = 0; i < nextStates.size(); i++) {
-        System.out.println(i + ":");
-        System.out.println(nextStates.get(i));
+        System.out.println(i + ": " + nextStates.get(i));
       }
+
       System.out.print("> ");
       try (java.util.Scanner in = new java.util.Scanner(System.in)) {
         int selection = in.nextInt();
         interpreter.step(nextStates.get(selection));
       }
+
+      System.out.println(interpreter.getCurrentState());
     }
   }
 
