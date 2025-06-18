@@ -4,8 +4,22 @@ import java.util.List;
 
 abstract class Stmt {
   interface Visitor<R> {
-    R visitOpDefStmt(OpDef stmt);
     R visitPrintStmt(Print stmt);
+    R visitOpDefStmt(OpDef stmt);
+  }
+  static class Print extends Stmt {
+    Print(Token location, Expr expression) {
+      this.location = location;
+      this.expression = expression;
+    }
+
+    @Override
+    <R> R accept(Visitor<R> visitor) {
+      return visitor.visitPrintStmt(this);
+    }
+
+    final Token location;
+    final Expr expression;
   }
   static class OpDef extends Stmt {
     OpDef(Token name, Expr body) {
@@ -20,18 +34,6 @@ abstract class Stmt {
 
     final Token name;
     final Expr body;
-  }
-  static class Print extends Stmt {
-    Print(Expr expression) {
-      this.expression = expression;
-    }
-
-    @Override
-    <R> R accept(Visitor<R> visitor) {
-      return visitor.visitPrintStmt(this);
-    }
-
-    final Expr expression;
   }
 
   abstract <R> R accept(Visitor<R> visitor);

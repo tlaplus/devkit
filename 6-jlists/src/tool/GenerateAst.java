@@ -23,9 +23,8 @@ public class GenerateAst {
     ));
 
     defineAst(outputDir, "Stmt", Arrays.asList(
-      "Print    : Expr expression",
+      "Print    : Token location, Expr expression",
       "OpDef    : Token name, Expr body"
-      //"VarDecl  : List<String> names"
     ));
   }
 

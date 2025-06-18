@@ -23,10 +23,12 @@ Add this to ''GenerateAst.java'' then run it to generate our new class:
     ));
 
     defineAst(outputDir, "Stmt", Arrays.asList(
-      "Print    : Expr expression"
+      "Print    : Token location, Expr expression"
     ));
   }
 </code>
+
+The ''Print'' class contains a ''Token'' instance to support reporting error locations.
 
 ===== Parsing statements =====
 
@@ -57,11 +59,11 @@ Modify ''parse()'' in the ''Parser'' class, same as in the book:
 </code>
 
 Our ''statement()'' method is different from the book; if we're in REPL mode we parse & return a statement wrapped in a ''Stmt.Print'' object, and error otherwise.
+Use ''peek()'' to get the first token in the expression for error location reporting.
 We'll return to this method later to add parsing logic for operator definitions.
-
 <code java>
   private Stmt statement() {
-    if (replMode) return new Stmt.Print(expression());
+    if (replMode) return new Stmt.Print(peek(), expression());
 
     throw error(peek(), "Expected statement.");
   }
@@ -198,7 +200,7 @@ Start off by generating a new class ''Stmt.OpDef'' by adding to the ''main()'' m
 
 <code java [highlight_lines_extra="3"]>
     defineAst(outputDir, "Stmt", Arrays.asList(
-      "Print    : Expr expression",
+      "Print    : Token location, Expr expression",
       "OpDef    : Token name, Expr body"
     ));
 </code>

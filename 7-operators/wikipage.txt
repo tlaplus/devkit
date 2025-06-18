@@ -296,14 +296,14 @@ Recall that ''isAtOpDefStart()'' is a lookahead method to determine whether the 
 Our changes to ''operatorDefinition()'' require modifying the definition of ''Stmt.OpDef'' in the ''GenerateAst'' class to accept parameters:
 <code java [highlight_lines_extra="3"]>
     defineAst(outputDir, "Stmt", Arrays.asList(
-      "Print    : Expr expression",
+      "Print    : Token location, Expr expression",
       "OpDef    : Token name, List<Token> params, Expr body"
     ));
 </code>
 
 We can now parse operators with parameters!
 On to functions.
-This requires defining a new expression type in the ''GenerateAST'' class:
+This requires defining a new expression type in the ''GenerateAst'' class:
 <code java [highlight_lines_extra="3"]>
     defineAst(outputDir, "Expr", Arrays.asList(
       "Binary   : Expr left, Token operator, Expr right",
