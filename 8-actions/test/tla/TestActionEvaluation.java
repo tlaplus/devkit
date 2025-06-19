@@ -2,9 +2,8 @@ package tla;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.util.Arrays;
 import java.util.List;
@@ -15,9 +14,7 @@ import org.junit.jupiter.api.Test;
 public class TestActionEvaluation {
 
   private static List<Stmt> parse(String input) {
-    Scanner s = new Scanner(input);
-    Parser p = new Parser(s.scanTokens(), true);
-    List<Stmt> statements = p.parse();
+    List<Stmt> statements = Utils.parse(input);
     for (Stmt statement : statements) {
       assertNotNull(statement, input);
     }
@@ -41,58 +38,48 @@ public class TestActionEvaluation {
     }
   }
 
-  private static String getRuntimeError(String input) {
-    try (IOCapture io = new IOCapture()) {
-      Scanner s = new Scanner(input);
-      Parser p = new Parser(s.scanTokens(), true);
-      Interpreter i = new Interpreter(true);
-      i.interpret(p.parse());
-      return io.getErr();
-    }
-  }
-
   @Test
   public void testVariableDeclarationErrors() {
-    assertNotEquals("", getRuntimeError("VARIABLES x, y, x"), "Duplicate variable name");
-    assertNotEquals("", getRuntimeError("x == 3 VARIABLE x"), "Variable name shadows operator name");
-    assertNotEquals("", getRuntimeError("VARIABLE x x == 3"), "Operator name shadows variable name");
-    assertNotEquals("", getRuntimeError("VARIABLE z op(x, y, z) == x op(1, 2, 3)"), "Parameter name shadows variable name");
+    assertTrue(Utils.hasInterpreterError("VARIABLES x, y, x"), "Duplicate variable name");
+    assertTrue(Utils.hasInterpreterError("x == 3 VARIABLE x"), "Variable name shadows operator name");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x x == 3"), "Operator name shadows variable name");
+    assertTrue(Utils.hasInterpreterError("VARIABLE z op(x, y, z) == x op(1, 2, 3)"), "Parameter name shadows variable name");
   }
 
   @Test
   public void testUninitializedVariableErrors() {
     // Unary ops
-    assertNotEquals("", getRuntimeError("VARIABLE x -x"), "Uninitialized variable negative");
-    assertNotEquals("", getRuntimeError("VARIABLE x ~x"), "Uninitialized variable ~");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x -x"), "Uninitialized variable negative");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x ~x"), "Uninitialized variable ~");
 
     // Binary ops
-    assertNotEquals("", getRuntimeError("VARIABLE x x + 1"), "Uninitialized variable +");
-    assertNotEquals("", getRuntimeError("VARIABLE x x - 1"), "Uninitialized variable minus");
-    assertNotEquals("", getRuntimeError("VARIABLE x x .. 2"), "Uninitialized variable ..");
-    assertNotEquals("", getRuntimeError("VARIABLE x x < 2"), "Uninitialized variable <");
-    assertNotEquals("", getRuntimeError("VARIABLE x 2 \\in x"), "Uninitialized variable \\in");
-    assertNotEquals("", getRuntimeError("VARIABLE x 2 = x"), "Uninitialized variable =");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x x + 1"), "Uninitialized variable +");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x x - 1"), "Uninitialized variable minus");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x x .. 2"), "Uninitialized variable ..");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x x < 2"), "Uninitialized variable <");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x 2 \\in x"), "Uninitialized variable \\in");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x 2 = x"), "Uninitialized variable =");
 
     // Ternary ops
-    assertNotEquals("", getRuntimeError("VARIABLE x IF x THEN 0 ELSE 1"), "Uninitialized variable ITE");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x IF x THEN 0 ELSE 1"), "Uninitialized variable ITE");
 
     // Variadic ops
-    assertNotEquals("", getRuntimeError("VARIABLE x {x}"), "Uninitialized variable {}");
-    assertNotEquals("", getRuntimeError("VARIABLE x {0, 1, x}"), "Uninitialized variable {}");
-    assertNotEquals("", getRuntimeError("VARIABLE x x /\\ TRUE"), "Uninitialized variable /\\");
-    assertNotEquals("", getRuntimeError("VARIABLE x x \\/ TRUE"), "Uninitialized variable \\/");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x {x}"), "Uninitialized variable {}");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x {0, 1, x}"), "Uninitialized variable {}");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x x /\\ TRUE"), "Uninitialized variable /\\");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x x \\/ TRUE"), "Uninitialized variable \\/");
 
     // Quantified functions
-    assertNotEquals("", getRuntimeError("VARIABLE x [n \\in x |-> n]"), "Uninitialized variable |-> set");
-    assertNotEquals("", getRuntimeError("VARIABLE x [n \\in {1} |-> x]"), "Uninitialized variable |-> body");
-    assertNotEquals("", getRuntimeError("VARIABLE x \\A n \\in x : TRUE"), "Uninitialized variable \\A set");
-    assertNotEquals("", getRuntimeError("VARIABLE x \\A n \\in {1} : x"), "Uninitialized variable \\A body");
-    assertNotEquals("", getRuntimeError("VARIABLE x \\E n \\in x : TRUE"), "Uninitialized variable \\E set");
-    assertNotEquals("", getRuntimeError("VARIABLE x \\E n \\in {1} : x"), "Uninitialized variable \\E body");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x [n \\in x |-> n]"), "Uninitialized variable |-> set");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x [n \\in {1} |-> x]"), "Uninitialized variable |-> body");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x \\A n \\in x : TRUE"), "Uninitialized variable \\A set");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x \\A n \\in {1} : x"), "Uninitialized variable \\A body");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x \\E n \\in x : TRUE"), "Uninitialized variable \\E set");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x \\E n \\in {1} : x"), "Uninitialized variable \\E body");
 
     // Function application
-    assertNotEquals("", getRuntimeError("VARIABLE x x[0]"), "Uninitialized variable f[x] f");
-    assertNotEquals("", getRuntimeError("VARIABLE x [v \\in {0} |-> v][x]"), "Uninitialized variable f[x] x");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x x[0]"), "Uninitialized variable f[x] f");
+    assertTrue(Utils.hasInterpreterError("VARIABLE x [v \\in {0} |-> v][x]"), "Uninitialized variable f[x] x");
   }
 
   @Test

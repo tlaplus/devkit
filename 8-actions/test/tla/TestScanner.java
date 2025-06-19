@@ -10,15 +10,12 @@ import org.junit.jupiter.api.Test;
 public class TestScanner {
 
   private static void compare(String input, TokenType... expected) {
-    try (IOCapture io = new IOCapture()) {
-      Scanner s = new Scanner(input);
-      List<Token> actual = s.scanTokens();
-      assertEquals(expected.length, actual.size());
-      int i = 0;
-      for (Token t : actual) {
-        assertEquals(expected[i], t.type);
-        i++;
-      }
+    List<Token> actual = Utils.scan(input);
+    assertEquals(expected.length, actual.size());
+    int i = 0;
+    for (Token t : actual) {
+      assertEquals(expected[i], t.type);
+      i++;
     }
   }
 

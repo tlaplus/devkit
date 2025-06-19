@@ -10,6 +10,8 @@ import java.nio.charset.StandardCharsets;
 
 class IOCapture implements AutoCloseable {
 
+  public record RecordedOutput(String out, String err) { }
+
   private final PrintStream stdout = System.out;
   private final PrintStream stderr = System.err;
   private final InputStream stdin = System.in;
@@ -35,12 +37,8 @@ class IOCapture implements AutoCloseable {
     }
   }
 
-  public String getOut() {
-    return out.toString();
-  }
-
-  public String getErr() {
-    return err.toString();
+  public RecordedOutput getCapturedOutput() {
+    return new RecordedOutput(out.toString(), err.toString());
   }
 
   @Override

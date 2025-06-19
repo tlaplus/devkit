@@ -84,7 +84,7 @@ class Parser {
   }
 
   private Expr operatorExpression(int prec) {
-    if (prec == 16) return apply();
+    if (prec == 16) return call();
 
     Operator op;
     if ((op = matchOp(Fix.PREFIX, prec)) != null) {
@@ -110,7 +110,7 @@ class Parser {
     return expr;
   }
 
-  private Expr apply() {
+  private Expr call() {
     Expr expr = primary();
 
     while (match(LEFT_BRACKET)) {

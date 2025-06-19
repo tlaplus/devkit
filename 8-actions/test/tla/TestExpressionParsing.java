@@ -1,26 +1,13 @@
 package tla;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 public class TestExpressionParsing {
 
   private static void checkEqual(String input, String expected) {
-    try (IOCapture io = new IOCapture()) {
-      Scanner s = new Scanner(input);
-      Parser p = new Parser(s.scanTokens(), true);
-      String actual = new AstPrinter().print(p.parse());
-      assertEquals("(print " + expected + ")", actual);
-    }
-  }
-
-  private static void checkError(String input) {
-    try (IOCapture io = new IOCapture()) {
-      Scanner s = new Scanner(input);
-      Parser p = new Parser(s.scanTokens(), true);
-      assertNull(p.parse().get(0));
-    }
+    assertEquals("(print " + expected + ")", Utils.parseToSExpr(input));
   }
 
   @Test
@@ -83,7 +70,7 @@ public class TestExpressionParsing {
 
   @Test
   public void testAssociativityErrors() {
-    checkError("ENABLED ENABLED TRUE");
+    assertTrue(Utils.hasParseError("ENABLED ENABLED TRUE"));
   }
 
   @Test

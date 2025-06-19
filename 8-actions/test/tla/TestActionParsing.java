@@ -5,19 +5,15 @@ import org.junit.jupiter.api.Test;
 
 public class TestActionParsing {
 
-  private static void checkEqual(boolean replMode, String input, String expected) {
-    try (IOCapture io = new IOCapture()) {
-      Scanner s = new Scanner(input);
-      Parser p = new Parser(s.scanTokens(), replMode);
-      String actual = new AstPrinter().print(p.parse());
-      assertEquals(expected, actual);
-    }
+  private static void checkEqual(String input, String expected) {
+    String actual = Utils.parseToSExpr(input);
+    assertEquals(expected, actual);
   }
 
   @Test
   public void testVariableDeclaration() {
-    checkEqual(false, "VARIABLE x", "(VARIABLE x)");
-    checkEqual(false, "VARIABLES x", "(VARIABLE x)");
-    checkEqual(false, "VARIABLES x, y, z", "(VARIABLE x y z)");
+    checkEqual("VARIABLE x", "(VARIABLE x)");
+    checkEqual("VARIABLES x", "(VARIABLE x)");
+    checkEqual("VARIABLES x, y, z", "(VARIABLE x y z)");
   }
 }

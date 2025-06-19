@@ -152,7 +152,7 @@ class Interpreter implements Expr.Visitor<Object>,
             possibleNext.add(new HashMap<>(next));
           }
         }
-        checkIsDefined(left);
+        checkIsValue(left);
         return ((Set<?>)right).contains(left);
       case MINUS:
         checkNumberOperands(expr.operator, left, right);
@@ -166,11 +166,11 @@ class Interpreter implements Expr.Visitor<Object>,
       case EQUAL:
         if (left instanceof UnboundVariable) {
           UnboundVariable var = (UnboundVariable)left;
-          checkIsDefined(right);
+          checkIsValue(right);
           next.put(var.name().lexeme, right);
           return true;
         }
-        checkIsDefined(left, right);
+        checkIsValue(left, right);
         return left.equals(right);
       default:
         // Unreachable.
@@ -200,7 +200,7 @@ class Interpreter implements Expr.Visitor<Object>,
         Map<Object, Object> function = new HashMap<>();
         for (Environment binding : bindings) {
           Object value = executeBlock(expr.body, binding);
-          checkIsDefined(value);
+          checkIsValue(value);
           function.put(binding.get(param), value);
         }
         return function;
@@ -231,18 +231,18 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object visitFnApplyExpr(Expr.FnApply expr) {
-    Object function = evaluate(expr.fn);
-    checkFunctionOperand(expr.paren, function);
+    Object callee = evaluate(expr.fn);
+    checkFunctionOperand(expr.bracket, callee);
     Object argument = evaluate(expr.argument);
-    checkIsDefined(argument);
-    Map<?, ?> map = (Map<?, ?>)function;
-    if (!map.containsKey(argument)) {
-      throw new RuntimeError(expr.paren,
+    checkIsValue(argument);
+    Map<?, ?> function = (Map<?, ?>)callee;
+    if (!function.containsKey(argument)) {
+      throw new RuntimeError(expr.bracket,
           "Cannot apply function to element outside domain: "
           + argument.toString());
     }
 
-    return map.get(argument);
+    return function.get(argument);
   }
 
   @Override
@@ -252,14 +252,10 @@ class Interpreter implements Expr.Visitor<Object>,
         ? (primed ? next : current).get(expr.name.lexeme)
         : environment.get(expr.name);
 
-    if (callee instanceof UnboundVariable) {
-      return callee;
-    }
-
     if (!(callee instanceof TlaCallable)) {
       if (!expr.arguments.isEmpty()) {
         throw new RuntimeError(expr.name,
-            "Cannot call non-operator identifier.");
+            "Cannot give arguments to non-operator identifier.");
       }
 
       return callee;
@@ -339,7 +335,7 @@ class Interpreter implements Expr.Visitor<Object>,
         Set<Object> set = new HashSet<Object>();
         for (Expr parameter : expr.parameters) {
           Object value = evaluate(parameter);
-          checkIsDefined(value);
+          checkIsValue(value);
           set.add(value);
         }
         return set;
@@ -384,7 +380,7 @@ class Interpreter implements Expr.Visitor<Object>,
     }
   }
 
-  private void checkIsDefined(Object... operands) {
+  private void checkIsValue(Object... operands) {
     for (Object operand : operands) {
       if (operand instanceof UnboundVariable) {
         UnboundVariable var = (UnboundVariable)operand;

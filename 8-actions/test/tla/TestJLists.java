@@ -2,7 +2,6 @@ package tla;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.util.List;
 
@@ -11,17 +10,8 @@ import org.junit.jupiter.api.Test;
 public class TestJLists {
 
   private static void checkEqual(String input, String expected) {
-    try (IOCapture io = new IOCapture()) {
-      input = "op ==\n" + input;
-      Scanner s = new Scanner(input);
-      Parser p = new Parser(s.scanTokens(), false);
-      List<Stmt> statements = p.parse();
-      for (Stmt statement : statements) {
-        assertNotNull(statement, input);
-      }
-      String actual = new AstPrinter().print(statements);
-      assertEquals("(op " + expected + ")", actual, input);
-    }
+    String actual = Utils.parseToSExpr("op == \n" + input);
+    assertEquals("(op " + expected + ")", actual, input);
   }
 
   @Test
