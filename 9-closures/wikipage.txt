@@ -1,0 +1,7 @@
+I wish we could say we're ready to modelcheck safety properties, but alas - one final missing piece remains.
+Remember way back at the start of the [[creating:operators|Functions, Operators, and Parameters]] chapter when operators were described as being like macros?
+This was very literal - the expressions provided as parameters to an operator should be substituted into the operator body itself, //then// evaluated.
+Instead, we evaluated the operator parameters first, //then// substituted the resulting values into the operator body.
+This didn't matter before implementing the prime operator, but 
+
+[[creating:actions|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:safety|Next Page >]]

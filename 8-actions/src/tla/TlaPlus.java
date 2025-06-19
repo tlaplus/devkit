@@ -62,36 +62,35 @@ public class TlaPlus {
     System.out.println(new AstPrinter().print(statements));
     if (replMode && statements.size() == 1
         && statements.get(0) instanceof Stmt.Print) {
-      tryInteractiveStep((Stmt.Print)statements.get(0));
+      tryStep((Stmt.Print)statements.get(0));
     } else {
       interpreter.interpret(statements);
     }
   }
 
-  private static void tryInteractiveStep(Stmt.Print action) {
+  private static void tryStep(Stmt.Print action) {
     Object result = interpreter.executeBlock(action.expression, interpreter.globals);
     if (!(result instanceof Boolean)) {
       action.accept(interpreter);
       return;
     }
 
-    Map<String, Object> nextState = pickNext(
-        interpreter.getNextStates(action.location, action.expression));
-    if (null == nextState) {
+    List<Map<String, Object>> nextStates =
+      interpreter.getNextStates(action.location, action.expression);
+    if (nextStates.isEmpty()) {
       action.accept(interpreter);
       return;
     }
 
+    Map<String, Object> nextState = pickNext(nextStates);
     interpreter.setNextState(nextState);
-    interpreter.step();
+    interpreter.step(action.location);
     System.out.println(true);
-    System.out.println(interpreter.getCurrentState());
+    System.out.println(nextState);
   }
 
   private static Map<String, Object> pickNext(List<Map<String, Object>> nextStates) {
-    if (nextStates.isEmpty()) {
-      return null;
-    } else if (nextStates.size() == 1) {
+    if (nextStates.size() == 1) {
       return nextStates.get(0);
     } else {
       System.out.println("Select next state (enter number): ");

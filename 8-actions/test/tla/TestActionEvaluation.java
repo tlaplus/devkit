@@ -164,10 +164,10 @@ public class TestActionEvaluation {
             isInitialState
             ? i.getNextStates(init.location, init.expression)
             : i.getNextStates(next.location, next.expression);
-        isInitialState = false;
         assertTrue(nextStates.contains(state), state.toString() + " not in " + nextStates.toString());
         i.setNextState(state);
-        i.step();
+        i.step(isInitialState ? init.location : next.location);
+        isInitialState = false;
         assertTrue((boolean)i.executeBlock(inv.expression, i.globals));
       }
     }

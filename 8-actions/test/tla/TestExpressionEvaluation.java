@@ -18,7 +18,7 @@ public class TestExpressionEvaluation {
     assertEquals("false", Utils.interpret("~TRUE"));
     assertEquals("true", Utils.interpret("\\lnot FALSE"));
     assertEquals("false", Utils.interpret("\\neg TRUE"));
-    assertEquals("true", Utils.interpret("ENABLED TRUE"));
+    assertEquals("false", Utils.interpret("ENABLED TRUE"));
     assertEquals("false", Utils.interpret("ENABLED FALSE"));
     assertEquals("-4", Utils.interpret("-4"));
     assertEquals("0", Utils.interpret("-0"));

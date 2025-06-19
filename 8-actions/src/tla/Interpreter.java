@@ -45,10 +45,6 @@ class Interpreter implements Expr.Visitor<Object>,
     stmt.accept(this);
   }
 
-  Map<String, Object> getCurrentState() {
-    return new HashMap<>(current);
-  }
-
   List<Map<String, Object>> getNextStates(Token location, Expr action) {
     Set<Map<String, Object>> confirmedNext = new HashSet<>();
     clearNext();
@@ -83,10 +79,20 @@ class Interpreter implements Expr.Visitor<Object>,
     }
   }
 
-  void step() {
+  void step(Token location) {
+    if (!isComplete()) {
+      throw new RuntimeError(location,
+          "Cannot step to incomplete next state.");
+    }
+
     primed = false;
     current = next;
     clearNext();
+  }
+
+  private boolean isComplete() {
+    return !variables.isEmpty() && next.values().stream()
+        .noneMatch(v -> v instanceof UnboundVariable);
   }
 
   private void clearNext() {
@@ -378,11 +384,6 @@ class Interpreter implements Expr.Visitor<Object>,
 
   private String stringify(Object object) {
     return object.toString();
-  }
-
-  private boolean isComplete() {
-    return !variables.isEmpty() && next.values().stream()
-        .noneMatch(v -> v instanceof UnboundVariable);
   }
 
   private void checkIsValue(Object... operands) {

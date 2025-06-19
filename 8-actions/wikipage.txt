@@ -209,21 +209,33 @@ If the ''left'' operand is an ''UnboundVariable'' instance, then bind the ''left
 
 We only modify variable values in ''next'', not ''current''; variable values in ''current'' should be considered immutable.
 
-Although we won't yet use it, now is also a good time to define our ''step()'' method, which transitions the ''Interpreter'' instance to the next state; it has an associated helper method, ''clearNext()'':
+Although we won't yet use it, now is also a good time to define our ''step()'' method, which transitions the ''Interpreter'' instance to the next state; it has two associated helper methods, ''isComplete()'' and ''clearNext()'':
 <code java>
-  void step() {
+  void step(Token location) {
+    if (!isComplete()) {
+      throw new RuntimeError(location,
+          "Cannot step to incomplete next state.");
+    }
+
     primed = false;
     current = next;
     clearNext();
   }
 
-  void clearNext() {
+  private void isComplete() {
+    return !variables.isEmpty() && next.values().stream()
+        .noneMatch(v -> v instanceof UnboundVariable);
+  }
+
+  private void clearNext() {
     next = new HashMap<>();
     for (Token variable : variables.values()) {
       next.put(variable.lexeme, new UnboundVariable(variable));
     }
   }
 </code>
+
+''isComplete()'' checks to ensure the next state is completely defined, and ''clearNext()'' resets the value of ''next''.
 
 Now we see things taking shape: ''Interpreter'' is initialized with ''current'' set to ''null'' and ''primed'' set to ''true'', ready to define the system's initial state.
 The system's initial state is defined by setting the values of all declared variables in ''next'', using expressions like ''x = 0''.
@@ -244,7 +256,7 @@ Action ==
 The ''Action'' predicate matches next states where ''x'' is //either// 0 or 1.
 This means ''Action'' represents a nondeterministic step where the system can arbitrarily move to a state where ''x'' is 0, or a state where ''x'' is 1.
 
-Currently, we store the state in a single object in the ''Interpreter'' class.
+Currently, we store the next state in a single field in the ''Interpreter'' class.
 How can we represent & compute with multiple possible next states?
 The answer is to add another field to the ''Interpreter'' class, holding the set of identified possible next states:
 <code java [highlight_lines_extra="3"]>
@@ -272,12 +284,12 @@ We will write this very critical top-level loop now; create a new method ''getNe
   }
 </code>
 
-''getNextStates()'' will follow the following algorithm:
-- Clear the ''next'' state and push it onto ''possibleNext''
-- While states remain in ''possibleNext'', choose one, set it as ''next'', and evaluate ''action''
-- If ''action'' evaluates to ''true'' and also results in a complete ''next'' state with all variables bound to values, add ''next'' to a set of confirmed next states
-- Evaluating ''action'' might have pushed more states onto ''possibleNext'', so repeat the process until ''possibleNext'' is empty
-- Return the set of confirmed next states
+''getNextStates()'' will use the following algorithm:
+  - Clear the ''next'' state and push it onto ''possibleNext''
+  - While states remain in ''possibleNext'', choose one, set it as ''next'', and evaluate ''action''
+  - If ''action'' evaluates to ''true'' and also results in a complete ''next'' state with all variables bound to values, add ''next'' to a set of confirmed next states
+  - Evaluating ''action'' might have pushed more states onto ''possibleNext'', so repeat the process until ''possibleNext'' is empty
+  - Return the set of confirmed next states
 
 Here's how we set up everything outside of the central loop:
 <code java [highlight_lines_extra="2,3,4,5,6,8,9,10,11,13"]>
@@ -314,27 +326,19 @@ Now we can write the central loop:
 </code>
 
 Note again the judicious use of ''HashMap<>'' copy constructors to avoid the mutable ''HashMap<>'' key bug.
-The code uses the ''isComplete()'' helper method to check whether all variables have defined values in the next state:
-<code java>
-  boolean isComplete() {
-    return !variables.isEmpty() && next.values().stream()
-        .noneMatch(v -> v instanceof UnboundVariable);
-  }
-</code>
 
 It's worth spending some time considering the ''getNextStates()'' method.
 From a pure functional perspective the approach is quite displeasing; our interpreter isn't just evaluating expressions anymore, it's also spewing out a bunch of half-baked states on the side.
 This side-effectful method makes it quite a bit harder to reason about the current state of our interpreter, but within the limitations of the Java language the method is appropriate.
-It is also consistent with what we are already doing with the ''environment'' field.
 
 There is also the question of termination.
 What is preventing ''getNextStates()'' from entering an infinite loop?
-The answer is that we only add a state to ''possibleNext'' if either it is //already// in ''possibleNext'' (in which case it is de-duplicated) or after binding the value of at least one more variable than is bound in the current state.
+The answer is that we only add a state to ''possibleNext'' if either it is //already// in ''possibleNext'' (in which case it is de-duplicated) or after binding the value of at least one more variable than is bound in the ''next'' state under consideration.
 Thus the number of variables bound to concrete values in ''possibleNext'' increases monotonically, eventually encompassing all declared variables and terminating the loop.
 
 Let's get concrete.
 How do we add states to ''possibleNext'' while evaluating disjunction?
-For each disjunct, we set a fresh copy of the ''next'' state, then evaluate the disjunct and add the resulting modified ''next'' state to ''possibleNext''.
+For each disjunct, we use a fresh copy of the ''next'' state, then evaluate the disjunct and add the resulting modified ''next'' state to ''possibleNext''.
 As described above, this state will either already be in ''possibleNext'' (so be de-duplicated) or have bound the value of at least one more state variable.
 We need to evaluate every disjunct to ensure we find all possible next states, which is why TLA⁺ disjunction does not short-circuit.
 Modify the ''OR'' handling code in ''visitVariadicExpr()'' as highlighted:
@@ -390,6 +394,31 @@ Then update the ''EXISTS'' case of ''visitQuantFnExpr()'' as highlighted:
 </code>
 
 We can now generate all nondeterministic next states by calling ''getNextStates()'' with an appropriate action!
+
+===== The ENABLED Operator =====
+
+Now that we've written ''getNextStates()'', we can fully define the ''ENABLED'' prefix operator!
+An expression ''ENABLED Action'' evaluates to ''true'' if ''Action'' produces at least one possible next state.
+So, as simple as a quick call to ''getNextStates()'' to see whether it returns an empty list or not!
+Well, not quite - the ''ENABLED'' operator can possibly be evaluated //inside// an action, so inside a call to ''getNextStates()''!
+This means we need some extra ceremony to stash the current values of ''next'' and ''possibleNext'', then restore them using the standard ''try''/''finally'' block method.
+Add the highlighted code to the ''ENABLED'' case in ''visitUnaryExpr()'':
+<code java [highlight_lines_extra="2,3,4,5,6,7,8,9,10"]>
+      } case ENABLED: {
+        Map<String, Object> oldNext = next;
+        Set<Map<String,Object>> oldPossibleNext = possibleNext;
+        try {
+          clearNext();
+          return !getNextStates(expr.operator, expr.expr).isEmpty();
+        } finally {
+          next = oldNext;
+          possibleNext = oldPossibleNext;
+        }
+      } case NOT: {
+</code>
+
+This is a big milestone: we now have fully defined //everything// in our minimal TLA⁺ language subset!
+We aren't at the end yet, but it's well within sight.
 
 ===== Error Checking =====
 
@@ -457,4 +486,110 @@ And also the ''visitFnApplyExpr()'' method:
     checkIsValue(argument);
     Map<?, ?> function = (Map<?, ?>)callee;
 </code>
+
+===== Hooking Up the Interpreter =====
+
+It takes a bit of thought to consider how we should expose our new state-stepping capabilities through the REPL.
+One decent approach is to hijack ''Stmt.Print'' statements to trigger steps if they happen to define possible next states.
+For this, add the following code to the bottom of the ''run()'' method in the ''TlaPlus'' class:
+<code java [highlight_lines_extra="4,5,6,7,8,9"]>
+    // Stop if there was a syntax error.
+    if (hadError) return;
+
+    if (replMode && statements.size() == 1
+        && statements.get(0) instanceof Stmt.Print) {
+      tryStep((Stmt.Print)statements.get(0));
+    } else {
+      interpreter.interpret(statements);
+    }
+  }
+</code>
+
+This calls a method we'll define in ''TlaPlus'' called ''tryStep()''.
+The ''tryStep()'' method should first speculatively execute ''action'' to see what sort of value it returns; if it doesn't return a ''Boolean'', treat it as an ordinary ''Stmt.Print'' statement.
+However, if ''action'' //does// return a ''Boolean'', it might be a valid action leading to new states, so call ''getNextStates()''.
+If this generates no new states, again treat ''action'' as an ordinary ''Stmt.Print'' statement:
+<code java>
+  private static void tryStep(Stmt.Print action) {
+    Object result = interpreter.executeBlock(action.expression, interpreter.globals);
+    if (!(result instanceof Boolean)) {
+      action.accept(interpreter);
+      return;
+    }
+
+    List<Map<String, Object>> nextStates =
+      interpreter.getNextStates(action.location, action.expression);
+    if (nextStates.isEmpty()) {
+      action.accept(interpreter);
+      return;
+    }
+  }
+</code>
+
+The ''java.util.Map'' class must be imported at the top of the file:
+<code java [highlight_lines_extra="2"]>
+import java.util.List;
+import java.util.Map;
+
+public class TlaPlus {
+</code>
+
+At this point all that remains is to handle the case of what happens when the ''Stmt.Print'' statement //does// generate possible next states.
+The REPL should choose one next state and make ''interpreter'' step to it; add this to the bottom of ''tryStep()'':
+<code java [highlight_lines_extra="8,9,10,11,12"]>
+    List<Map<String, Object>> nextStates =
+      interpreter.getNextStates(action.location, action.expression);
+    if (nextStates.isEmpty()) {
+      System.out.println(false);
+      return;
+    }
+
+    Map<String, Object> nextState = pickNext(nextStates);
+    interpreter.setNextState(nextState);
+    interpreter.step(action.location);
+    System.out.println(true);
+    System.out.println(nextState);
+  }
+</code>
+
+We also print out ''true'' - the value ''Stmt.Print'' would have printed - and display the value of the next state for the user.
+This called two methods; one, in ''Interpreter'', sets the value of ''next'':
+<code java>
+  void setNextState(Map<String, Object> next) {
+    this.next = next;
+  }
+</code>
+
+The other, in ''TlaPlus'', picks the next state to step to.
+If there are multiple possible next states, the user is prompted to choose one:
+<code java>
+  private static Map<String, Object> pickNext(List<Map<String, Object>> nextStates) {
+    if (nextStates.size() == 1) {
+      return nextStates.get(0);
+    } else {
+      System.out.println("Select next state (enter number): ");
+      for (int i = 0; i < nextStates.size(); i++) {
+        System.out.println(i + ": " + nextStates.get(i));
+      }
+
+      System.out.print("> ");
+      try (java.util.Scanner in = new java.util.Scanner(System.in)) {
+        return nextStates.get(in.nextInt());
+      }
+    }
+  }
+</code>
+
+And that's it!
+You can now run the REPL and step through the state space!
+Try entering expressions like the following:
+  - ''VARIABLE x''
+  - ''x = 0''
+  - ''x' \in 0 .. 5''
+
+This was a pivotal chapter; excellent work making it to the end.
+You can find the expected state of the codebase in [[https://github.com/tlaplus/devkit/tree/main/8-actions|this repository]].
+See you in the [[creating:closures|next chapter on closures!]]
+
+[[creating:operators|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:closures|Next Page >]]
 
