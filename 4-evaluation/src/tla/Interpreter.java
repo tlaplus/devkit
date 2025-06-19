@@ -107,7 +107,8 @@ class Interpreter implements Expr.Visitor<Object> {
       case LEFT_BRACE:
         Set<Object> set = new HashSet<Object>();
         for (Expr parameter : expr.parameters) {
-          set.add(evaluate(parameter));
+          Object value = evaluate(parameter);
+          set.add(value);
         }
         return set;
       default:

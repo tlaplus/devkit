@@ -151,6 +151,7 @@ class Interpreter implements Expr.Visitor<Object>,
             left = element;
             possibleNext.add(new HashMap<>(next));
           }
+          return true;
         }
         checkIsValue(left);
         return ((Set<?>)right).contains(left);
