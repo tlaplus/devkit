@@ -123,7 +123,8 @@ class Interpreter implements Expr.Visitor<Object>,
         Token param = expr.params.get(0);
         Map<Object, Object> function = new HashMap<>();
         for (Environment binding : bindings) {
-          function.put(binding.get(param), executeBlock(expr.body, binding));
+          Object value = executeBlock(expr.body, binding);
+          function.put(binding.get(param), value);
         }
         return function;
       } case FOR_ALL: {

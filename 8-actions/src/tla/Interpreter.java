@@ -247,19 +247,22 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Object visitVariableExpr(Expr.Variable expr) {
-    Object referent = getValue(expr.name);
+    Object callee =
+        variables.containsKey(expr.name.lexeme)
+        ? (primed ? next : current).get(expr.name.lexeme)
+        : environment.get(expr.name);
 
-    if (referent instanceof UnboundVariable) {
-      return referent;
+    if (callee instanceof UnboundVariable) {
+      return callee;
     }
 
-    if (!(referent instanceof TlaCallable)) {
+    if (!(callee instanceof TlaCallable)) {
       if (!expr.arguments.isEmpty()) {
         throw new RuntimeError(expr.name,
             "Cannot call non-operator identifier.");
       }
 
-      return referent;
+      return callee;
     }
 
     List<Object> arguments = new ArrayList<>();
@@ -267,7 +270,7 @@ class Interpreter implements Expr.Visitor<Object>,
       arguments.add(evaluate(argument));
     }
 
-    TlaCallable operator = (TlaCallable)referent;
+    TlaCallable operator = (TlaCallable)callee;
     if (arguments.size() != operator.arity()) {
       throw new RuntimeError(expr.name, "Expected " +
           operator.arity() + " arguments but got " +
@@ -366,14 +369,6 @@ class Interpreter implements Expr.Visitor<Object>,
 
   private String stringify(Object object) {
     return object.toString();
-  }
-
-  private Object getValue(Token name) {
-    if (variables.containsKey(name.lexeme)) {
-      return (primed ? next : current).get(name.lexeme);
-    }
-
-    return environment.get(name);
   }
 
   private boolean isComplete() {

@@ -568,7 +568,7 @@ Construct a ''BindingGenerator'' instance atop the ''switch'' statement:
 </code>
 One important thing to note is that unlike in ''TlaOperator'', we give ''BindingGenerator'' the //current// environment instead of the root global environment; this is because if we are evaluating an ''Expr.QuantFn'' instance inside an operator, the body expression should be able to access definitions from the operator's environment, like:
 <code haskell>
-op(x) == \A y \in 0 .. 2 : y < x 
+op(x) == \A y \in 0 .. 2 : y < x
 </code>
 Here's how we implement the ''EXISTS'' case; unlike universal quantification, existential quantification is not short-circuiting in TLA⁺ (for reasons that will become clear in the next chapter):
 <code java [highlight_lines_extra="2,3,4,5,6,7,8"]>
@@ -583,12 +583,13 @@ Here's how we implement the ''EXISTS'' case; unlike universal quantification, ex
       } default: {
 </code>
 Finally, here's how we implement the ''ALL_MAP_TO'' case; we want to construct a ''Map<Object, Object>'' instance recording each value the single parameter is mapped to:
-<code java [highlight_lines_extra="2,3,4,5,6,7"]>
+<code java [highlight_lines_extra="2,3,4,5,6,7,8"]>
       case ALL_MAP_TO: {
         Token param = expr.params.get(0);
         Map<Object, Object> function = new HashMap<>();
         for (Environment binding : bindings) {
-          function.put(binding.get(param), executeBlock(expr.body, binding));
+          Object value = executeBlock(expr.body, binding);
+          function.put(binding.get(param), value);
         }
         return function;
       } case FOR_ALL: {
