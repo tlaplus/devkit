@@ -9,14 +9,6 @@ import java.util.HashMap;
 
 class Interpreter implements Expr.Visitor<Object>,
                              Stmt.Visitor<Void> {
-  final Environment globals;
-  private Environment environment;
-
-  private boolean primed = true;
-  private final Map<String, Token> variables = new HashMap<>();
-  private Map<String, Object> current = null;
-  private Map<String, Object> next = new HashMap<>();
-  private Set<Map<String, Object>> possibleNext = new HashSet<>();
 
   private record UnboundVariable(Token name) {
     @Override
@@ -24,6 +16,15 @@ class Interpreter implements Expr.Visitor<Object>,
       return name.lexeme;
     }
   }
+
+  final Environment globals;
+  private Environment environment;
+
+  private final Map<String, Token> variables = new HashMap<>();
+  private Map<String, Object> current = null;
+  private Map<String, Object> next = new HashMap<>();
+  private Set<Map<String, Object>> possibleNext = new HashSet<>();
+  private boolean primed = true;
 
   public Interpreter(boolean replMode) {
     this.globals = new Environment(replMode);
@@ -68,9 +69,7 @@ class Interpreter implements Expr.Visitor<Object>,
     return new ArrayList<>(confirmedNext);
   }
 
-  void step(Map<String, Object> next) {
-    primed = false;
-    current = next;
+  void setNextState(Map<String, Object> next) {
     this.next = next;
   }
 
@@ -81,6 +80,20 @@ class Interpreter implements Expr.Visitor<Object>,
       return evaluate(expr);
     } finally {
       this.environment = previous;
+    }
+  }
+
+  void step() {
+    primed = false;
+    current = next;
+    clearNext();
+  }
+
+  private void clearNext() {
+    possibleNext = new HashSet<>();
+    next = new HashMap<>();
+    for (Token variable : variables.values()) {
+      next.put(variable.lexeme, new UnboundVariable(variable));
     }
   }
 
@@ -153,7 +166,6 @@ class Interpreter implements Expr.Visitor<Object>,
           }
           return true;
         }
-        checkIsValue(left);
         return ((Set<?>)right).contains(left);
       case MINUS:
         checkNumberOperands(expr.operator, left, right);
@@ -249,9 +261,9 @@ class Interpreter implements Expr.Visitor<Object>,
   @Override
   public Object visitVariableExpr(Expr.Variable expr) {
     Object callee =
-        variables.containsKey(expr.name.lexeme)
-        ? (primed ? next : current).get(expr.name.lexeme)
-        : environment.get(expr.name);
+      variables.containsKey(expr.name.lexeme)
+      ? (primed ? next : current).get(expr.name.lexeme)
+      : environment.get(expr.name);
 
     if (!(callee instanceof TlaCallable)) {
       if (!expr.arguments.isEmpty()) {
@@ -369,16 +381,8 @@ class Interpreter implements Expr.Visitor<Object>,
   }
 
   private boolean isComplete() {
-    return next.values().stream()
+    return !variables.isEmpty() && next.values().stream()
         .noneMatch(v -> v instanceof UnboundVariable);
-  }
-
-  private void clearNext() {
-    possibleNext = new HashSet<>();
-    next = new HashMap<>();
-    for (Token variable : variables.values()) {
-      next.put(variable.lexeme, new UnboundVariable(variable));
-    }
   }
 
   private void checkIsValue(Object... operands) {

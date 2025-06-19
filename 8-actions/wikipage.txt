@@ -44,6 +44,7 @@ Create a new statement type for them in the ''GenerateAst'' class:
       "OpDef    : Token name, List<Token> params, Expr body"
     ));
 </code>
+
 Then use the old ''do''/''while'' trick to parse comma-separated variable names in the ''declaration()'' method of the ''Parser'' class:
 <code java [highlight_lines_extra="4,5,6,7,8,9,10"]>
   private Stmt declaration() {
@@ -61,64 +62,73 @@ Then use the old ''do''/''while'' trick to parse comma-separated variable names 
 </code>
 
 Before we can define a ''Stmt.VarDecl'' visitor, we need to come up with a way to manage variables & states.
-It's simplest to copy the ''Environment'' approach and record the current state as a field in the ''Interpreter'' class:
-<code java [highlight_lines_extra="6"]>
+The interpreter must keep track of only two states: the current state, and the next state.
+Each state is a mapping from strings - representing variables - to values.
+The interpreter also must keep track of the set of declared variables.
+For this we add three new fields near the top of the ''Interpreter'' class:
+<code java [highlight_lines_extra="6,7,8"]>
 class Interpreter implements Expr.Visitor<Object>,
                              Stmt.Visitor<Void> {
   final Environment globals;
   private Environment environment;
-  private final PrintStream out;
-  private State state = new State();
+
+  private final Map<String, Token> variables = new HashMap<>();
+  private Map<String, Object> current = null;
+  private Map<String, Object> next = new HashMap<>();
 </code>
 
-This requires a new class!
-Create a file called ''State.java''; for now, this just supports the ability to declare variables; it also produces an error if the user attempts to declare the same variable twice:
-<code java>
-package tla;
+We choose to initialize the ''current'' state to ''null'' because when the interpreter is created, the system's initial state has not yet been defined.
+The system's initial state will be built in ''next'', which then eventually becomes ''current''.
 
-import java.util.HashMap;
-import java.util.Map;
-
-class State {
-  private Map<String, Token> variables = new HashMap<>();
-
-  boolean isDeclared(Token name) {
-    return variables.containsKey(name.lexeme);
-  }
-
-  void declareVariable(Token name) {
-    if (isDeclared(name)) {
-      throw new RuntimeError(name, "Redeclared state variable.");
-    }
-
-    variables.put(name.lexeme, name);
-  }
-}
-</code>
-
-That's enough to implement ''visitVarDeclStmt()'' in the ''Interpreter'' class:
+The new fields are enough to implement ''visitVarDeclStmt()'' in the ''Interpreter'' class:
 <code java>
   @Override
   public Void visitVarDeclStmt(Stmt.VarDecl stmt) {
     checkNotDefined(stmt.names);
     for (Token name : stmt.names) {
-      state.declareVariable(name);
+      variables.put(name.lexeme, name);
+      next.put(name.lexeme, new UnboundVariable(name));
     }
 
     return null;
   }
 </code>
 
-In intepreter mode we continue to support redefining operators, but will produce an error if the user attempts to redefine an operator as a state variable or vice versa.
-Add this check to the ''visitOpDefStmt()'' method of the ''Interpreter'' class:
-<code java [highlight_lines_extra="2,3,4"]>
+This requires a new datatype!
+What is the value of a variable when it is declared but not yet bound to a value?
+It must be a new null type, which we will call ''UnboundVariable''.
+Add ''UnboundVariable'' as a new record type near the top of the ''Interpreter'' class:
+<code java [highlight_lines_extra="4,5,6,7,8,9"]>
+class Interpreter implements Expr.Visitor<Object>,
+                             Stmt.Visitor<Void> {
+
+  private record UnboundVariable(Token name) {
+    @Override
+    public String toString() {
+      return name.lexeme;
+    }
+  }
+
+  final Environment globals;
+</code>
+
+It's important to keep variable declarations & operator definitions disjoint.
+In interpreter mode we continue to support redefining operators, but should produce an error if the user attempts to redefine an operator as a state variable or vice versa.
+Add the highlighted code to ''visitOpDefStmt()'' in the ''Interpreter'' class:
+<code java [highlight_lines_extra="9,10,11"]>
   public Void visitOpDefStmt(Stmt.OpDef stmt) {
-    if (state.isDeclared(stmt.name)) {
+    checkNotDefined(stmt.params);
+    for (Token param : stmt.params) {
+      if (param.lexeme.equals(stmt.name.lexeme)) {
+        throw new RuntimeError(param, "Identifier already in use.");
+      }
+    }
+
+    if (variables.containsKey(stmt.name.lexeme)) {
       throw new RuntimeError(stmt.name, "State variable redeclared as operator.");
     }
 
     TlaOperator op = new TlaOperator(stmt);
-    environment.define(stmt.name, op);
 </code>
 
 Also augment the ''checkNotDefined()'' helper method, so state variables cannot be shadowed by operator parameters:
@@ -129,101 +139,57 @@ Also augment the ''checkNotDefined()'' helper method, so state variables cannot 
         throw new RuntimeError(name, "Identifier already in use.");
       }
 
-      if (state.isDeclared(name)) {
+      if (variables.containsKey(name.lexeme)) {
         throw new RuntimeError(name, "Name conflicts with state variable.");
       }
     }
 </code>
 
-===== Initializing State Variables =====
+===== Reading & Priming State Variables =====
 
-Now that we can declare variables, what value are they initialized to?
-We've successfully dodged this issue for a very long time in this tutorial series, but unfortunately the initial value of these variables is undefined.
-That means we will need a null value type.
-We've avoided null types thus far, which means we haven't had to do as many checks before using values in the interpreter - a real luxury!
-Alas we now depart this wonderful land.
-Create a new record class ''UnboundVariable'' nested inside the ''State'' class:
-<code java [highlight_lines_extra="3,4,5,6,7,8"]>
-  private Map<String, Token> variables = new HashMap<>();
-
-  record UnboundVariable(Token name) {
-    @Override
-    public String toString() {
-      return name.lexeme;
-    }
-  }
-
-  boolean isDeclared(Token name) {
-</code>
-
-Also in the ''State'' class, we need to track variable values for the current & next states; add one ''Map<>'' instance for each:
-<code java [highlight_lines_extra="3,4"]>
-class State {
-  private Map<String, Token> variables = new HashMap<>();
-  private Map<String, Object> current = new HashMap<>();
-  private Map<String, Object> next = new HashMap<>();
-</code>
-
-Then, in ''declareVariable()'', initialize the variables in ''next'' to instances of ''UnboundVariable''; the ones in ''current'' are initialized to null, as they should never be accessed during ordinary operation (more on this below):
-<code java [highlight_lines_extra="2,3,4"]>
-    variables.put(name.lexeme, name);
-    current.put(name.lexeme, null);
-    next.put(name.lexeme, new UnboundVariable(name, true));
-  }
-</code>
-
-Finally, make debugging a bit easier by implementing ''toString()'' for the ''State'' class:
-<code java>
-  @Override
-  public String toString() {
-    return  "Current: " + current.toString() + "\n" +
-            "Next:    " + next.toString();
-  }
-</code>
-
-===== Getting State Variables =====
-
-To retrieve variable values, modify the ever-more-complicated ''visitVariableExpr()'' method of the ''Interpreter'' class to call a new ''getValue()'' helper; if the value resolves to an ''UnboundVariable'' instance, return it immediately:
-<code java [highlight_lines_extra="2,4,5,6"]>
+To resolve variable values, modify the ever-more-complicated ''visitVariableExpr()'' method of the ''Interpreter'' class to first check whether it's resolving a variable, falling back to an ''environment'' lookup if not:
+<code java [highlight_lines_extra="2,3,4,5"]>
   public Object visitVariableExpr(Expr.Variable expr) {
-    Object referent = getValue(expr.name);
-
-    if (referent instanceof State.UnboundVariable) {
-      return referent;
-    }
+    Object referent =
+      variables.containsKey(expr.name.lexeme)
+      ? (primed ? next : current).get(expr.name.lexeme)
+      : environment.get(expr.name);
 
     if (!(referent instanceof TlaCallable)) {
 </code>
 
-The new ''getValue()'' helper merges lookup logic for state variables & operators; these should be disjoint, although state variable values are checked first:
-<code java>
-  private Object getValue(Token name) {
-    if (state.isDeclared(name)) {
-      return state.getValue(name);
-    }
-
-    return environment.get(name);
-  }
-</code>
-
-To define ''getValue()'' in the ''State'' class we need to determine whether to pull state variable values from ''current'' or ''next''.
-For this there must be some way of tracking whether we are currently inside a primed expression.
-Not just variables can be primed in TLA⁺, entire expressions can be!
-The meaning of a primed expression is that every state variable within that expression is primed.
-This is tracked with a boolean class variable in ''State'', which is initialized to true (for reasons which later be made clear):
+This makes use of yet another field we must add to the ''Interpreter'' class, ''primed'':
 <code java [highlight_lines_extra="2"]>
-class State {
+  private Map<String, Object> next = new HashMap<>();
   private boolean primed = true;
-  private Map<String, Token> variables = new HashMap<>();
+
+  public Interpreter(boolean replMode) {
 </code>
 
-Now define ''getValue()'' in the ''State'' class.
-If ''primed'' is true, we retrieve the state variable value from ''next''; if false, we retrieve it from ''current'':
-<code java>
-  Object getValue(Token name) {
-    return (primed ? next : current).get(name.lexeme);
-  }
+The ''primed'' field controls whether variable values are pulled from the ''current'' or ''next'' states.
+When inside a primed expression, variables are pulled from ''next''; when outside of primed expressions, variables are pulled from ''current''.
+The ''primed'' field is initialized to ''true'', since the interpreter builds the system's initial state in the ''next'' field so we want all expressions to be implicitly primed at first.
+We can now finally define the prime operator for real, in ''visitUnaryExpr()'' in the ''Interpreter'' class:
+<code java [highlight_lines_extra="4,5,6,7,8,9,10,11,12"]>
+  public Object visitUnaryExpr(Expr.Unary expr) {
+    switch (expr.operator.type) {
+      case PRIME: {
+        if (primed) {
+          throw new RuntimeError(expr.operator,
+              "Cannot double-prime expression nor prime initial state.");
+        } try {
+          primed = true;
+          return evaluate(expr.expr);
+        } finally {
+          primed = false;
+        }
+      } case ENABLED: {
 </code>
+
+Double-priming an expression or priming an expression in the initial state are both fatal errors in TLA⁺.
+The meaning of priming an expression is that all state variables within that expression are primed, so the way the expression is evaluated is fundamentally changed.
+This is why the prime operator somewhat uniquely modifies the state of the ''Interpreter'' instance itself.
+Similar to in ''executeBlock()'', we wrap this ''Interpreter'' state modification inside a ''try''/''finally'' block to ensure that if the evaluation produces a runtime exception, ''primed'' is reset to ''false'' so the ''Interpreter'' instance is not left in a corrupted state.
 
 ===== Setting State Variables =====
 
@@ -235,130 +201,34 @@ If the ''left'' operand is an ''UnboundVariable'' instance, then bind the ''left
       case EQUAL:
         if (left instanceof State.UnboundVariable) {
           UnboundVariable var = (UnboundVariable)left;
-          state.bindValue(var, right);
+          next.put(var.name().lexeme, right);
           return true;
         }
         return left.equals(right);
 </code>
 
-Define ''bindValue()'' in the ''State'' class, which binds the variable's value in ''next'' if the ''UnboundVariable'' instance is primed and ''current'' if it is not:
-<code java>
-  void bindValue(UnboundVariable var, Object value) {
-    next.put(var.name().lexeme, value);
-  }
-</code>
+We only modify variable values in ''next'', not ''current''; variable values in ''current'' should be considered immutable.
 
-Only modification of ''next'' is supported, not ''current''.
-While this seems like it could lead to bugs, our method of handling initial states (defined below) ensures it does not.
-
-===== The Prime Operator =====
-
-We now have everything necessary to define the prime operator.
-Here's how it should work: in ''visitUnaryExpr()'' in the ''Interpreter'' class, detect that we are evaluating the prime operator; if so, prime the current state, evaluate the operand as a primed expression, then unprime the state and return the value of the operand.
-<code java>
-  public Object visitUnaryExpr(Expr.Unary expr) {
-    if (TokenType.PRIME == expr.operator.type) {
-      state.prime(expr.operator);
-      try {
-        return evaluate(expr.expr);
-      } finally {
-        state.unprime();
-      }
-    }
-</code>
-Note that we wrap the evaluation in a ''try''/''finally'' similar to in ''executeBlock()'', to restore the interpreter to an ordinary state if the evaluation results in an exception.
-
-We need to put the code at the top of ''visitUnaryExpr()'' because the other unary operators evaluate the operand first, but the prime operator changes how the operand is evaluated - it calls ''state.prime()'' beforehand!
-Let's define the ''prime()'' and ''unprime()'' methods in the ''State'' class:
-<code java>
-  void prime(Token op) {
-    primed = true;
-  }
-
-  void unprime() {
-    primed = false;
-  }
-</code>
-
-===== Error Checking =====
-
-Our code is nice & simple, but unfortunately it has more holes than Swiss cheese.
-Let's muddy it up with a bunch of error checks.
-
-Null value types like ''UnboundVariable'' produce a major annoyance: we now need to sprinkle null checks throughout our evaluation code!
-Thankfully many null checks are already handled by our existing stable of ''check-Operand()'' helpers, but some cases still remain.
-Near the bottom of the ''Interpreter'' class, create a new helper method ''checkIsDefined()'':
-<code java>
-  private void checkIsDefined(Object... operands) {
-    for (Object operand : operands) {
-      if (operand instanceof State.UnboundVariable) {
-        UnboundVariable var = (UnboundVariable)operand;
-        throw new RuntimeError(var.name(), "Use of unbound variable.");
-      }
-    }
-  }
-</code>
-
-In our ''EQUALS'' handling logic, we can only bind the value of ''right'' to a variable if ''right'' has a defined concrete value.
-Also, two values can only be compared for equality if they are both defined:
-<code java [highlight_lines_extra="4,8"]>
-      case EQUAL:
-        if (left instanceof State.UnboundVariable) {
-          UnboundVariable var = (UnboundVariable)left;
-          checkIsDefined(right);
-          state.bindValue(var, right);
-          return true;
-        }
-        checkIsDefined(left, right);
-        return left.equals(right);
-</code>
-
-A null check also must be added to the ''LEFT_BRACE'' case of ''visitVariadicExpr()''; we can't let the user construct sets full of undefined values!
-<code java [highlight_lines_extra="5"]>
-      case LEFT_BRACE:
-        Set<Object> set = new HashSet<Object>();
-        for (Expr parameter : expr.parameters) {
-          Object value = evaluate(parameter);
-          checkIsDefined(value);
-          set.add(value);
-        }
-</code>
-
-===== The Initial State =====
-
-We can declare, set, and get state variables, but how does this all come together into a sequence of states?
-It starts with the initial state.
-Not all components of a TLA⁺ spec are actions; the initial state predicate only operates on unprimed variables.
-While we //could// add another field to ''State'' recording whether we are in the initial state, this is unnecessary.
-Remember when we initialized ''prime'' to true?
-This implicitly puts us in the initial state; variables will have their values bound in ''next'', and if the user tries to prime a variable in the initial state we raise an error:
-<code java [highlight_lines_extra="2,3,4,5"]>
-  void prime(Token op) {
-    if (primed) {
-      throw new RuntimeError(op,
-          "Cannot double-prime expression or prime initial state.");
-    }
-
-    primed = true;
-  }
-</code>
-Once we transition to a non-initial state ''isPrimed'' becomes false outside of primed expressions.
-This check also catches the case where users double-prime an expression, which is illegal in TLA⁺.
-
-Next we define the all-important ''step()'' method of the ''State'' class, which transitions it to the next state:
+Although we won't yet use it, now is also a good time to define our ''step()'' method, which transitions the ''Interpreter'' instance to the next state; it has an associated helper method, ''clearNext()'':
 <code java>
   void step() {
     primed = false;
     current = next;
+    clearNext();
+  }
+
+  void clearNext() {
     next = new HashMap<>();
-    for (Map.Entry<String, Token> var : variables.entrySet()) {
-      next.put(var.getKey(), new UnboundVariable(var.getValue(), true));
+    for (Token variable : variables.values()) {
+      next.put(variable.lexeme, new UnboundVariable(variable));
     }
   }
 </code>
 
-Now we can define the initial state using a non-primed predicate, step, define the next state using primed variables, then step again //ad infinitum//.
-All we have to do is wire everything up; first, though, we should tackle nondeterminism.
+Now we see things taking shape: ''Interpreter'' is initialized with ''current'' set to ''null'' and ''primed'' set to ''true'', ready to define the system's initial state.
+The system's initial state is defined by setting the values of all declared variables in ''next'', using expressions like ''x = 0''.
+Then, ''step()'' is called, which sets ''current'' to ''next'' and ''primed'' to ''false''; the system is now in its initial state, ready to take steps to next states.
+The values of variables in ''next'' are subsequently set using expressions like ''x' = 1 - x'', then ''step()'' is called again, and so on.
 
 ===== Nondeterminism =====
 
@@ -378,39 +248,73 @@ Currently, we store the state in a single object in the ''Interpreter'' class.
 How can we represent & compute with multiple possible next states?
 The answer is to add another field to the ''Interpreter'' class, holding the set of identified possible next states:
 <code java [highlight_lines_extra="3"]>
-  private final PrintStream out;
-  private State state = new State();
-  private final Set<State> possibleNext = new HashSet<>();
+  private Map<String, Object> current = null;
+  private Map<String, Object> next = new HashMap<>();
+  private Set<Map<String, Object>> possibleNext = new HashSet<>();
+  private boolean primed = true;
 
-  public Interpreter(PrintStream out, boolean replMode) {
+  public Interpreter(boolean replMode) {
 </code>
 
-When our interpreter finds multiple possible next states, it tosses one of them into ''possibleNext'' for later consideration and continues evaluating & binding the variables in the current state.
+We also update ''clearNext()'' to wipe the new ''possibleNext'' field:
+<code java [highlight_lines_extra="2"]>
+  private void clearNext() {
+    possibleNext = new HashSet<>();
+    next = new HashMap<>();
+</code>
+
+When our interpreter finds multiple possible next states, it tosses them into ''possibleNext'' for later consideration and continues evaluating & binding the variables in the current state.
 Then some top-level loop churns through the ''possibleNext'' set, either ruling out or accepting each possible next state until none remain.
-We will write this top-level loop now; create a new method ''getNextStates()'' in the ''Interpreter'' class:
+We will write this very critical top-level loop now; create a new method ''getNextStates()'' in the ''Interpreter'' class:
 <code java>
-  List<State> getNextStates(Stmt.OpDef action, State current) {
-    Set<State> confirmedNext = new HashSet<>();
+  List<Map<String, Object>> getNextStates(Token location, Expr action) {
+
+  }
+</code>
+
+''getNextStates()'' will follow the following algorithm:
+- Clear the ''next'' state and push it onto ''possibleNext''
+- While states remain in ''possibleNext'', choose one, set it as ''next'', and evaluate ''action''
+- If ''action'' evaluates to ''true'' and also results in a complete ''next'' state with all variables bound to values, add ''next'' to a set of confirmed next states
+- Evaluating ''action'' might have pushed more states onto ''possibleNext'', so repeat the process until ''possibleNext'' is empty
+- Return the set of confirmed next states
+
+Here's how we set up everything outside of the central loop:
+<code java [highlight_lines_extra="2,3,4,5,6,8,9,10,11,13"]>
+  List<Map<String, Object>> getNextStates(Token location, Expr action) {
+    Set<Map<String, Object>> confirmedNext = new HashSet<>();
+    clearNext();
+    possibleNext.add(new HashMap<>(next));
     try {
-      possibleNext.add(current);
       while (!possibleNext.isEmpty()) {
-        state = possibleNext.iterator().next();
-        Object satisfied = evaluate(action.body);
-        checkBooleanOperand(action.name, satisfied);
-        if ((boolean)satisfied && state.isComplete()) confirmedNext.add(state);
-        possibleNext.remove(state);
+
       }
     } finally {
-      possibleNext.clear();
-      state.clearNext();
+      clearNext();
     }
 
     return new ArrayList<>(confirmedNext);
   }
 </code>
 
-This requires two additional methods in the ''State'' class: ''isComplete()'', and ''clearNext()''.
-A state is complete when it has at least one declared variable and all declared variables have been bound to concrete values in the next state:
+We use the familiar ''try''/''finally'' approach when evaluating expressions within a modified ''Interpreter'' state to ensure runtime exceptions do not corrupt the ''Interpreter'' instance.
+We also use the ''new HashMap<>(next)'' copy constructor to copy ''next'' before putting it in ''possibleNext'', which avoids a //very// subtle bug: since evaluating the action modifies the values in ''next'', and we put ''next'' into a ''HashMap<>'' which records its position by calculating a hash of the value of ''next'', if we subsequently modify the same object put into the ''HashMap<>'' then that value will get "lost" in the datastructure, because its hash value changed.
+For more on this peculiar issue, consult the Java ''[[https://docs.oracle.com/javase/8/docs/api/java/util/Map.html|Map<>]]'' documentation which warns against using mutable objects as keys.
+
+Now we can write the central loop:
+<code java [highlight_lines_extra="2,3,4,5,6,7"]>
+      while (!possibleNext.isEmpty()) {
+        Map<String, Object> trunk = possibleNext.iterator().next();
+        next = new HashMap<>(trunk);
+        Object satisfied = evaluate(action);
+        checkBooleanOperand(location, satisfied);
+        if ((boolean)satisfied && isComplete()) confirmedNext.add(next);
+        possibleNext.remove(trunk);
+      }
+</code>
+
+Note again the judicious use of ''HashMap<>'' copy constructors to avoid the mutable ''HashMap<>'' key bug.
+The code uses the ''isComplete()'' helper method to check whether all variables have defined values in the next state:
 <code java>
   boolean isComplete() {
     return !variables.isEmpty() && next.values().stream()
@@ -418,56 +322,35 @@ A state is complete when it has at least one declared variable and all declared 
   }
 </code>
 
-The ''clearNext()'' method wipes out the values in ''next'', to avoid leaving the ''state'' field in an incomplete state:
-<code java>
-  void clearNext() {
-    for (Map.Entry<String, Token> var : variables.entrySet()) {
-      next.put(var.getKey(), new UnboundVariable(var.getValue(), true));
-    }
-  }
-</code>
-
 It's worth spending some time considering the ''getNextStates()'' method.
 From a pure functional perspective the approach is quite displeasing; our interpreter isn't just evaluating expressions anymore, it's also spewing out a bunch of half-baked states on the side.
 This side-effectful method makes it quite a bit harder to reason about the current state of our interpreter, but within the limitations of the Java language the method is appropriate.
-It is also consistent with what we are already doing with the ''environment'' and ''state'' fields.
+It is also consistent with what we are already doing with the ''environment'' field.
 
 There is also the question of termination.
 What is preventing ''getNextStates()'' from entering an infinite loop?
-The answer (as we'll see) is that we only add a state to ''possibleNext'' if either it is //already// in ''possibleNext'' (in which case it is de-duplicated) or after binding the value of at least one more variable than is bound in the current state.
+The answer is that we only add a state to ''possibleNext'' if either it is //already// in ''possibleNext'' (in which case it is de-duplicated) or after binding the value of at least one more variable than is bound in the current state.
 Thus the number of variables bound to concrete values in ''possibleNext'' increases monotonically, eventually encompassing all declared variables and terminating the loop.
 
 Let's get concrete.
 How do we add states to ''possibleNext'' while evaluating disjunction?
-For each disjunct, we give ''state'' a copy of the current state, then evaluate the disjunct and add the resulting value of ''state'' to ''possibleNext''.
-As described above, this state will either be the same as the current state (so be de-duplicated) or have bound the value of at least one more state variable.
+For each disjunct, we set a fresh copy of the ''next'' state, then evaluate the disjunct and add the resulting modified ''next'' state to ''possibleNext''.
+As described above, this state will either already be in ''possibleNext'' (so be de-duplicated) or have bound the value of at least one more state variable.
 We need to evaluate every disjunct to ensure we find all possible next states, which is why TLA⁺ disjunction does not short-circuit.
 Modify the ''OR'' handling code in ''visitVariadicExpr()'' as highlighted:
 <code java [highlight_lines_extra="3,5,8"]>
       case OR:
         boolean result = false;
-        State current = state;
+        Map<String, Object> trunk = next;
         for (Expr disjunct : expr.parameters) {
-          state = current.branch();
+          next = new HashMap<>(trunk);
           Object junctResult = evaluate(disjunct);
           checkBooleanOperand(expr.operator, junctResult);
-          possibleNext.add(state);
+          possibleNext.add(new HashMap<>(next));
           result |= (boolean)junctResult;
         }
         return result;
       default:
-</code>
-
-This requires creating a new ''branch()'' method in the ''State'' class, which shares references to all fields except ''next'', which is copied:
-<code java>
-  State branch() {
-    State branch = new State();
-    branch.primed = this.primed;
-    branch.variables = this.variables;
-    branch.current = this.current;
-    branch.next = new HashMap<>(this.next);
-    return branch;
-  }
 </code>
 
 There are two other operators to support for binding state variables: the set membership ''\in'' operator, and the ''\E'' existential quantification operator.
@@ -478,15 +361,15 @@ Add the following code to the ''IN'' case in ''visitBinaryExpr()'':
         checkSetOperand(expr.operator, right);
         if (left instanceof State.UnboundVariable) {
           UnboundVariable var = (UnboundVariable)left;
-          State current = state;
+          Map<String, Object> trunk = next;
           for (Object element : (Set<?>)right) {
-            state = current.branch();
-            state.bindValue(var, element);
+            next = new HashMap<>(trunk);
+            next.put(var.name().lexeme, element);
             left = element;
-            possibleNext.add(state);
+            possibleNext.add(new HashMap<>(next));
           }
+          return true;
         }
-        checkIsDefined(left);
         return ((Set<?>)right).contains(left);
 </code>
 
@@ -495,15 +378,83 @@ Then update the ''EXISTS'' case of ''visitQuantFnExpr()'' as highlighted:
       } case EXISTS: {
         boolean result = false;
         State current = state;
+        Map<String, Object> trunk = next;
         for (Environment binding : bindings) {
-          state = current.branch();
+          next = new HashMap<>(trunk);
           Object junctResult = executeBlock(expr.body, binding);
           checkBooleanOperand(expr.op, junctResult);
-          possibleNext.add(state);
+          possibleNext.add(new HashMap<>(next));
           result |= (boolean)junctResult;
         }
         return result;
 </code>
 
 We can now generate all nondeterministic next states by calling ''getNextStates()'' with an appropriate action!
+
+===== Error Checking =====
+
+Our code is nice & simple, but unfortunately it has more holes than Swiss cheese.
+Let's add some error checks!
+
+Null value types like ''UnboundVariable'' produce a major annoyance: we now need to sprinkle null checks throughout our evaluation code!
+Thankfully many null checks are already handled by our existing stable of ''check-Operand()'' helpers, but some cases still remain.
+Near the bottom of the ''Interpreter'' class, create a new helper method ''checkIsValue()'':
+<code java>
+  private void checkIsValue(Object... operands) {
+    for (Object operand : operands) {
+      if (operand instanceof UnboundVariable) {
+        UnboundVariable var = (UnboundVariable)operand;
+        throw new RuntimeError(var.name(), "Use of unbound variable.");
+      }
+    }
+  }
+</code>
+
+In our ''EQUALS'' handling logic, we can only bind the value of ''right'' to a variable if ''right'' has a defined concrete value.
+Also, two values can only be compared for equality if they are both defined:
+<code java [highlight_lines_extra="4,8"]>
+      case EQUAL:
+        if (left instanceof UnboundVariable) {
+          UnboundVariable var = (UnboundVariable)left;
+          checkIsValue(right);
+          next.put(var.name().lexeme, right);
+          return true;
+        }
+        checkIsValue(left, right);
+        return left.equals(right);
+</code>
+
+A null check must also must be added to the ''LEFT_BRACE'' case in ''visitVariadicExpr()'':
+<code java [highlight_lines_extra="5"]>
+      case LEFT_BRACE:
+        Set<Object> set = new HashSet<Object>();
+        for (Expr parameter : expr.parameters) {
+          Object value = evaluate(parameter);
+          checkIsValue(value);
+          set.add(value);
+        }
+</code>
+
+The ''ALL_MAP_TO'' case in ''visitQuantFnExpr()'':
+<code java [highlight_lines_extra="6"]>
+      case ALL_MAP_TO: {
+        Token param = expr.params.get(0);
+        Map<Object, Object> function = new HashMap<>();
+        for (Environment binding : bindings) {
+          Object value = executeBlock(expr.body, binding);
+          checkIsValue(value);
+          function.put(binding.get(param), value);
+        }
+        return function;
+</code>
+
+And also the ''visitFnApplyExpr()'' method:
+<code java [highlight_lines_extra="5"]>
+  public Object visitFnApplyExpr(Expr.FnApply expr) {
+    Object callee = evaluate(expr.fn);
+    checkFunctionOperand(expr.bracket, callee);
+    Object argument = evaluate(expr.argument);
+    checkIsValue(argument);
+    Map<?, ?> function = (Map<?, ?>)callee;
+</code>
 

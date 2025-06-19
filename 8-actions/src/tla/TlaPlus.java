@@ -75,16 +75,25 @@ public class TlaPlus {
       return;
     }
 
-    List<Map<String, Object>> nextStates =
-        interpreter.getNextStates(action.location, action.expression);
-    if (nextStates.isEmpty()) {
+    Map<String, Object> nextState = pickNext(
+        interpreter.getNextStates(action.location, action.expression));
+    if (null == nextState) {
       action.accept(interpreter);
+      return;
+    }
+
+    interpreter.setNextState(nextState);
+    interpreter.step();
+    System.out.println(true);
+    System.out.println(interpreter.getCurrentState());
+  }
+
+  private static Map<String, Object> pickNext(List<Map<String, Object>> nextStates) {
+    if (nextStates.isEmpty()) {
+      return null;
     } else if (nextStates.size() == 1) {
-      interpreter.step(nextStates.get(0));
-      System.out.println(true);
-      System.out.println(interpreter.getCurrentState());
+      return nextStates.get(0);
     } else {
-      System.out.println(true);
       System.out.println("Select next state (enter number): ");
       for (int i = 0; i < nextStates.size(); i++) {
         System.out.println(i + ": " + nextStates.get(i));
@@ -92,11 +101,8 @@ public class TlaPlus {
 
       System.out.print("> ");
       try (java.util.Scanner in = new java.util.Scanner(System.in)) {
-        int selection = in.nextInt();
-        interpreter.step(nextStates.get(selection));
+        return nextStates.get(in.nextInt());
       }
-
-      System.out.println(interpreter.getCurrentState());
     }
   }
 

@@ -166,7 +166,8 @@ public class TestActionEvaluation {
             : i.getNextStates(next.location, next.expression);
         isInitialState = false;
         assertTrue(nextStates.contains(state), state.toString() + " not in " + nextStates.toString());
-        i.step(state);
+        i.setNextState(state);
+        i.step();
         assertTrue((boolean)i.executeBlock(inv.expression, i.globals));
       }
     }
