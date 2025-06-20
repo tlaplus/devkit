@@ -1,4 +1,4 @@
-package com.craftinginterpreters.tool;
+package tool;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -14,15 +14,20 @@ public class GenerateAst {
     String outputDir = args[0];
     defineAst(outputDir, "Expr", Arrays.asList(
       "Binary   : Expr left, Token operator, Expr right",
+      "QuantFn  : Token op, List<Token> params, Expr set, Expr body",
+      "FnApply  : Expr fn, Token bracket, Expr argument",
       "Grouping : Expr expression",
       "Literal  : Object value",
-      "Unary    : Token operator, Expr right",
-      "Postfix  : Expr left, Token operator",
-      "ITE      : Expr condition, Expr yes, Expr no",
-      "Set      : List<Expr> elements",
-      "FnAppl   : Expr name, Expr parameter",
-      "FnCons   : String intro, Expr set, Expr expr",
-      "Quant    : Token quantifier, List<String> intros, Expr set, Expr expr"
+      "Variable : Token name, List<Expr> arguments",
+      "Unary    : Token operator, Expr expr",
+      "Ternary  : Token operator, Expr first, Expr second, Expr third",
+      "Variadic : Token operator, List<Expr> parameters"
+    ));
+
+    defineAst(outputDir, "Stmt", Arrays.asList(
+      "VarDecl  : List<Token> names",
+      "Print    : Token location, Expr expression",
+      "OpDef    : Token name, List<Token> params, Expr body"
     ));
   }
 
@@ -32,7 +37,7 @@ public class GenerateAst {
     String path = outputDir + "/" + baseName + ".java";
     PrintWriter writer = new PrintWriter(path, "UTF-8");
 
-    writer.println("package com.craftinginterpreters.tla;");
+    writer.println("package tla;");
     writer.println();
     writer.println("import java.util.List;");
     writer.println();
