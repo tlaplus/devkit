@@ -64,6 +64,12 @@ class Interpreter implements Expr.Visitor<Object>,
 
     return new ArrayList<>(confirmedNext);
   }
+  
+  void setCurrentState(Map<String, Object> current) {
+    this.current = current;
+    primed = this.current == null;
+    clearNext();
+  }
 
   void setNextState(Map<String, Object> next) {
     this.next = next;

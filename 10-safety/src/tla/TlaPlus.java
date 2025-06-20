@@ -19,24 +19,45 @@ public class TlaPlus {
       System.out.println("Usage: jlox [script]");
       System.exit(64);
     } else if (args.length == 1) {
+      interpreter = new Interpreter(false);
       runFile(args[0]);
     } else {
+      interpreter = new Interpreter(true);
       runPrompt();
     }
   }
 
   private static void runFile(String path) throws IOException {
-    interpreter = new Interpreter(false);
     byte[] bytes = Files.readAllBytes(Paths.get(path));
-    run(new String(bytes, StandardCharsets.UTF_8), false);
+    String input = new String(bytes, StandardCharsets.UTF_8);
+    Scanner scanner = new Scanner(input);
+    List<Token> tokens = scanner.scanTokens();
+    Parser parser = new Parser(tokens, false);
+    List<Stmt> statements = parser.parse();
 
-    // Indicate an error in the exit code.
     if (hadError) System.exit(65);
+
+    interpreter.interpret(statements);
+    
+    //runPrompt();
+
     if (hadRuntimeError) System.exit(70);
+    
+    ModelChecker mc = new ModelChecker(interpreter, statements);
+    try {
+      List<Map<String, Object>> trace = mc.checkSafety();
+      System.out.println(
+          trace == null
+          ? "Invariant holds on state space."
+          : "Invariant does not hold; trace:\n" + trace
+      );
+    } catch (RuntimeError e) {
+      TlaPlus.runtimeError(e);
+      System.exit(70);
+    }
   }
 
   private static void runPrompt() throws IOException {
-    interpreter = new Interpreter(true);
     InputStreamReader input = new InputStreamReader(System.in);
     BufferedReader reader = new BufferedReader(input);
 

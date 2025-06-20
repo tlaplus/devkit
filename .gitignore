@@ -33,3 +33,5 @@ target
 .settings
 .bsp
 
+# TLA+ files
+states
