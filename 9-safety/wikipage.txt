@@ -1,0 +1,9 @@
+======= Model-Checking Safety Properties =======
+
+This has been a long journey.
+We learned scanning, then parsing, then how to interpret basic constant expressions.
+Statements were added next, then we learned to parse conjunction & disjunction lists.
+Finally, we learned how to apply operators and move between states.
+Everything is in place; it is time to write a TLA⁺ model-checker.
+
+

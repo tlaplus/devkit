@@ -292,7 +292,9 @@ class Interpreter implements Expr.Visitor<Object>,
       case PRIME: {
         if (primed) {
           throw new RuntimeError(expr.operator,
-              "Cannot double-prime expression nor prime initial state.");
+              current == null
+              ? "Cannot prime expression in initial state."
+              : "Cannot double-prime expression.");
         } try {
           primed = true;
           return evaluate(expr.expr);
