@@ -1,0 +1,44 @@
+name: Build & Test
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+      fail-fast: false
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: adopt
+          java-version: 17
+      - name: Install SBT
+        uses: sbt/setup-sbt@v1
+      - name: Validate 2-scanning
+        run: cd 2-scanning && sbt compile test eclipse
+      - name: Validate 3-expressions
+        run: cd 3-expressions && sbt compile test eclipse
+      - name: Validate 4-evaluation
+        run: cd 4-evaluation && sbt compile test eclipse
+      - name: Validate 5-statements
+        run: cd 5-statements && sbt compile test eclipse
+      - name: Validate 6-jlists
+        run: cd 6-jlists && sbt compile test eclipse
+      - name: Validate 7-operators
+        run: cd 7-operators && sbt compile test eclipse
+      - name: Validate 8-actions
+        run: cd 8-actions && sbt compile test eclipse
+      - name: Validate 9-safety
+        run: cd 9-safety && sbt compile test eclipse
+
