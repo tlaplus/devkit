@@ -145,7 +145,7 @@ Also augment the ''checkNotDefined()'' helper method, so state variables cannot 
     }
 </code>
 
-===== Reading & Priming State Variables =====
+===== Reading, Priming, & Setting State Variables =====
 
 To resolve variable values, modify the ever-more-complicated ''visitVariableExpr()'' method of the ''Interpreter'' class to first check whether it's resolving a variable, falling back to an ''environment'' lookup if not:
 <code java [highlight_lines_extra="2,3,4,5"]>
@@ -193,15 +193,13 @@ The meaning of priming an expression is that all state variables within that exp
 This is why the prime operator somewhat uniquely modifies the state of the ''Interpreter'' instance itself.
 Similar to in ''executeBlock()'', we wrap this ''Interpreter'' state modification inside a ''try''/''finally'' block to ensure that if the evaluation produces a runtime exception, ''primed'' is reset to ''false'' so the ''Interpreter'' instance is not left in a corrupted state.
 
-===== Setting State Variables =====
-
 We can retrieve state variable values, but what about assigning them?
 To start, let's handle the simple case of expressions of the form ''x' = expr''.
 This requires modifying the ''EQUAL'' case of ''visitBinaryExpr()'' in the ''Interpreter'' class.
 If the ''left'' operand is an ''UnboundVariable'' instance, then bind the ''left'' state variable to the value of ''right'':
 <code java [highlight_lines_extra="2,3,4,5,6"]>
       case EQUAL:
-        if (left instanceof State.UnboundVariable) {
+        if (left instanceof UnboundVariable) {
           UnboundVariable var = (UnboundVariable)left;
           next.put(var.name().lexeme, right);
           return true;
@@ -209,40 +207,7 @@ If the ''left'' operand is an ''UnboundVariable'' instance, then bind the ''left
         return left.equals(right);
 </code>
 
-We only modify variable values in ''next'', not ''current''; variable values in ''current'' should be considered immutable.
-
-Although we won't yet use it, now is also a good time to define our ''step()'' method, which transitions the ''Interpreter'' instance to the next state; it has two associated helper methods, ''isComplete()'' and ''clearNext()'':
-<code java>
-  void step(Token location) {
-    if (!isComplete()) {
-      throw new RuntimeError(location,
-          "Cannot step to incomplete next state.");
-    }
-
-    primed = false;
-    current = next;
-    clearNext();
-  }
-
-  private void isComplete() {
-    return !variables.isEmpty() && next.values().stream()
-        .noneMatch(v -> v instanceof UnboundVariable);
-  }
-
-  private void clearNext() {
-    next = new HashMap<>();
-    for (Token variable : variables.values()) {
-      next.put(variable.lexeme, new UnboundVariable(variable));
-    }
-  }
-</code>
-
-''isComplete()'' checks to ensure the next state is completely defined, and ''clearNext()'' resets the value of ''next''.
-
-Now we see things taking shape: ''Interpreter'' is initialized with ''current'' set to ''null'' and ''primed'' set to ''true'', ready to define the system's initial state.
-The system's initial state is defined by setting the values of all declared variables in ''next'', using expressions like ''x = 0''.
-Then, ''step()'' is called, which sets ''current'' to ''next'' and ''primed'' to ''false''; the system is now in its initial state, ready to take steps to next states.
-The values of variables in ''next'' are subsequently set using expressions like ''x' = 1 - x'', then ''step()'' is called again, and so on.
+We only modify variable values in ''next'', not ''current''; variable values in ''current'' should be considered immutable, and we will never let an ''UnboundVariable'' value into the ''current'' state.
 
 ===== Nondeterminism =====
 
@@ -268,13 +233,6 @@ The answer is to add another field to the ''Interpreter'' class, holding the set
   private boolean primed = true;
 
   public Interpreter(boolean replMode) {
-</code>
-
-We also update ''clearNext()'' to wipe the new ''possibleNext'' field:
-<code java [highlight_lines_extra="2"]>
-  private void clearNext() {
-    possibleNext = new HashSet<>();
-    next = new HashMap<>();
 </code>
 
 When our interpreter finds multiple possible next states, it tosses them into ''possibleNext'' for later consideration and continues evaluating & binding the variables in the next state currently under construction.
@@ -315,7 +273,18 @@ We use the familiar ''try''/''finally'' approach when evaluating expressions wit
 We also use the ''new HashMap<>(next)'' copy constructor to copy ''next'' before putting it in ''possibleNext'', which avoids a //very// subtle bug: since evaluating the action modifies the values in ''next'', and we put ''next'' into a ''HashMap<>'' which records its position by calculating a hash of the value of ''next'', if we subsequently modify the same object put into the ''HashMap<>'' then that value will get "lost" in the datastructure, because its hash value changed.
 For more on this peculiar issue, consult the Java ''[[https://docs.oracle.com/javase/8/docs/api/java/util/Map.html|Map<>]]'' documentation which warns against using mutable objects as keys.
 
-Now we can write the central loop:
+This code also requires a new ''clearNext()'' helper method in the ''Interpreter'' class, which does what you might expect from the name; it clears ''possibleNext'' then unbinds all variables in ''next'':
+<code java>
+  private void clearNext() {
+    possibleNext = new HashSet<>();
+    next = new HashMap<>();
+    for (Token variable : variables.values()) {
+      next.put(variable.lexeme, new UnboundVariable(variable));
+    }
+  }
+</code>
+
+Now we can write the central ''getNextStates()'' loop:
 <code java [highlight_lines_extra="2,3,4,5,6,7"]>
       while (!possibleNext.isEmpty()) {
         Map<String, Object> trunk = possibleNext.iterator().next();
@@ -328,6 +297,13 @@ Now we can write the central loop:
 </code>
 
 Note again the judicious use of ''HashMap<>'' copy constructors to avoid the mutable ''HashMap<>'' key bug.
+This code requires yet another ''Interpreter'' helper method to check whether a next state candidate is complete (has all variables assigned to concrete values):
+<code java>
+  private boolean isComplete() {
+    return !variables.isEmpty() && next.values().stream()
+        .noneMatch(v -> v instanceof UnboundVariable);
+  }
+</code>
 
 It's worth spending some time considering the ''getNextStates()'' method.
 From a pure functional perspective the approach is quite displeasing; our interpreter isn't just evaluating expressions anymore, it's also spewing out a bunch of half-baked states on the side.
@@ -365,7 +341,7 @@ Add the following code to the ''IN'' case in ''visitBinaryExpr()'':
 <code java [highlight_lines_extra="3,4,5,6,7,8,9,10,11,12,13"]>
       case IN:
         checkSetOperand(expr.operator, right);
-        if (left instanceof State.UnboundVariable) {
+        if (left instanceof UnboundVariable) {
           UnboundVariable var = (UnboundVariable)left;
           Map<String, Object> trunk = next;
           for (Object element : (Set<?>)right) {
@@ -547,18 +523,19 @@ The REPL should choose one next state and make ''interpreter'' step to it; add t
     }
 
     Map<String, Object> nextState = pickNext(nextStates);
-    interpreter.setNextState(nextState);
-    interpreter.step(action.location);
+    interpreter.goToState(nextState);
     System.out.println(true);
     System.out.println(nextState);
   }
 </code>
 
 We also print out ''true'' - the value ''Stmt.Print'' would have printed - and display the value of the next state for the user.
-This called two methods; one, in ''Interpreter'', sets the value of ''next'':
+This called two methods; one, ''goToState()'' in ''Interpreter'', sets the ''current'' state to the one given:
 <code java>
-  void setNextState(Map<String, Object> next) {
-    this.next = next;
+  void goToState(Map<String, Object> state) {
+    current = state;
+    primed = state == null;
+    clearNext();
   }
 </code>
 
