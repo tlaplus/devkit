@@ -589,7 +589,7 @@ Try entering expressions like the following:
 
 This was a pivotal chapter; excellent work making it to the end.
 You can find the expected state of the codebase in [[https://github.com/tlaplus/devkit/tree/main/8-actions|this repository]].
-See you in the [[creating:closures|next chapter on closures!]]
+Now we can put it all together and build a real model checker in [[creating:safety|the next chapter]]!
 
 [[creating:operators|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:closures|Next Page >]]
 

@@ -14,6 +14,6 @@ Each tutorial chapter has a corresponding mirror/backup/snapshot directory in th
 |       6 | [Conjunction & Disjunction Lists](https://docs.tlapl.us/creating:jlists)          | [6-jlists](6-jlists)           |
 |       7 | [Functions, Operators, and Parameters](https://docs.tlapl.us/creating:operators)  | [7-operators](7-operators)     |
 |       8 | [Variables, State, and Actions](https://docs.tlapl.us/creating:actions)           | [8-actions](8-actions)         |
-|       9 | [Closures, Resolving, and Binding](https://docs.tlapl.us/creating:closures)       | [9-closures](9-closures)       |
-|      10 | [Model-Checking Safety Properties](https://docs.tlapl.us/creating:safety)         | [10-safety](10-safety)         |
+|       9 | [Model-Checking Safety Properties](https://docs.tlapl.us/creating:safety)         | [9-safety](9-safety)           |
+|      10 | [Closures, Resolving, and Binding](https://docs.tlapl.us/creating:closures)       | [10-closures](10-closures)     |
 
