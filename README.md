@@ -1,4 +1,6 @@
 # tlaplus-creator
+[![CI](https://github.com/tlaplus/devkit/actions/workflows/ci.yml/badge.svg)](https://github.com/tlaplus/devkit/actions/workflows/ci.yml)
+
 Documents and code artifacts teaching you how to build your own TLA⁺ tools.
 Based on the free online textbook [*Crafting Interpreters*](https://craftinginterpreters.com/) by Robert Nystrom.
 Check out the tutorial starting [here](https://docs.tlapl.us/creating:start)!

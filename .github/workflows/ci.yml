@@ -18,11 +18,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Install JDK 17
+      - name: Install JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: adopt
-          java-version: 17
+          java-version: 21
       - name: Install SBT
         uses: sbt/setup-sbt@v1
       - name: Validate 2-scanning

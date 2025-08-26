@@ -39,7 +39,7 @@ There are two good reasons for this:
   - The high-quality free online textbook //[[https://craftinginterpreters.com/contents.html|Crafting Interpreters]]// by Robert Nystrom uses Java, and this tutorial is a simple TLA⁺-themed wrapper around its concepts. That book states its own reasons for using Java, which you can read.
 
 You will need to install the [[https://adoptium.net/|Java Development Kit]] appropriate for your system.
-This tutorial uses the Java 17 [[https://openjdk.org/jeps/395|records]] feature for terse definition of dataclasses, so you must install JDK 17 or higher.
+This tutorial requires Java 21 or higher, for the Java 17 [[https://openjdk.org/jeps/395|records]] feature and the Java 21 [[https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/SequencedCollection.html#reversed()|''reversed()'']] method.
 While all code artifacts can be produced entirely by reading this tutorial, if you get out of sync you can find working implementations in [[https://github.com/tlaplus/devkit|this git repository]].
 
 The tutorial has you construct the TLA⁺ tools from the bottom up.

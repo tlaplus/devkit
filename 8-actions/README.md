@@ -5,7 +5,7 @@ You can see the expected state of the source code after the tutorial in the [src
 Unit tests (not covered in the tutorial) are in the [test](test) directory.
 
 ## Dependencies
-- [OpenJDK 17+](https://adoptium.net/)
+- [OpenJDK 21+](https://adoptium.net/)
 - [sbt (simple build tool)](https://www.scala-sbt.org/)
 
 ## Build, test, run
