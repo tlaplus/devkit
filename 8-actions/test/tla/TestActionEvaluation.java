@@ -165,8 +165,7 @@ public class TestActionEvaluation {
             ? i.getNextStates(init.location, init.expression)
             : i.getNextStates(next.location, next.expression);
         assertTrue(nextStates.contains(state), state.toString() + " not in " + nextStates.toString());
-        i.setNextState(state);
-        i.step(isInitialState ? init.location : next.location);
+        i.goToState(state);
         isInitialState = false;
         assertTrue((boolean)i.executeBlock(inv.expression, i.globals));
       }
@@ -285,5 +284,39 @@ public class TestActionEvaluation {
         Map.of("x", 1),
         Map.of("x", 2)
     );
+  }
+
+  private static void stepThroughActions(String spec, String... actions) {
+    try (IOCapture io = new IOCapture()) {
+      Interpreter i = new Interpreter(true);
+      i.interpret(parse(spec));
+
+      for (String actionName : actions) {
+        Stmt.Print action = parseAction(actionName);
+        List<Map<String, Object>> nextStates = i.getNextStates(action.location, action.expression);
+        assertEquals(1, nextStates.size());
+        i.goToState(nextStates.get(0));
+      }
+    }
+  }
+
+  private static boolean hasTraceError(String spec, String... actions) {
+    try {
+      stepThroughActions(spec, actions);
+    } catch (RuntimeError e) {
+      return true;
+    }
+
+    return false;
+  }
+
+  @Test
+  public void testPrimeInInitialStateError() {
+    assertTrue(hasTraceError("VARIABLE x", "x' = 0"));
+  }
+
+  @Test
+  public void testDoublePrimeError() {
+    assertTrue(hasTraceError("VARIABLE x", "x = 0", "(x')' = 1"));
   }
 }

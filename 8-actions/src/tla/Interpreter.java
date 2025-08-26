@@ -65,8 +65,10 @@ class Interpreter implements Expr.Visitor<Object>,
     return new ArrayList<>(confirmedNext);
   }
 
-  void setNextState(Map<String, Object> next) {
-    this.next = next;
+  void goToState(Map<String, Object> state) {
+    current = state;
+    primed = state == null;
+    clearNext();
   }
 
   Object executeBlock(Expr expr, Environment environment) {
@@ -77,17 +79,6 @@ class Interpreter implements Expr.Visitor<Object>,
     } finally {
       this.environment = previous;
     }
-  }
-
-  void step(Token location) {
-    if (!isComplete()) {
-      throw new RuntimeError(location,
-          "Cannot step to incomplete next state.");
-    }
-
-    primed = false;
-    current = next;
-    clearNext();
   }
 
   private boolean isComplete() {
@@ -301,7 +292,9 @@ class Interpreter implements Expr.Visitor<Object>,
       case PRIME: {
         if (primed) {
           throw new RuntimeError(expr.operator,
-              "Cannot double-prime expression nor prime initial state.");
+              current == null
+              ? "Cannot prime expression in initial state."
+              : "Cannot double-prime expression.");
         } try {
           primed = true;
           return evaluate(expr.expr);

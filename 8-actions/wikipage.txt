@@ -170,13 +170,15 @@ The ''primed'' field controls whether variable values are pulled from the ''curr
 When inside a primed expression, variables are pulled from ''next''; when outside of primed expressions, variables are pulled from ''current''.
 The ''primed'' field is initialized to ''true'', since the interpreter builds the system's initial state in the ''next'' field so we want all expressions to be implicitly primed at first.
 We can now finally define the prime operator for real, in ''visitUnaryExpr()'' in the ''Interpreter'' class:
-<code java [highlight_lines_extra="4,5,6,7,8,9,10,11,12"]>
+<code java [highlight_lines_extra="4,5,6,7,8,9,10,11,12,13,14"]>
   public Object visitUnaryExpr(Expr.Unary expr) {
     switch (expr.operator.type) {
       case PRIME: {
         if (primed) {
           throw new RuntimeError(expr.operator,
-              "Cannot double-prime expression nor prime initial state.");
+              current == null
+              ? "Cannot prime expression in initial state."
+              : "Cannot double-prime expression.");
         } try {
           primed = true;
           return evaluate(expr.expr);
@@ -275,7 +277,7 @@ We also update ''clearNext()'' to wipe the new ''possibleNext'' field:
     next = new HashMap<>();
 </code>
 
-When our interpreter finds multiple possible next states, it tosses them into ''possibleNext'' for later consideration and continues evaluating & binding the variables in the current state.
+When our interpreter finds multiple possible next states, it tosses them into ''possibleNext'' for later consideration and continues evaluating & binding the variables in the next state currently under construction.
 Then some top-level loop churns through the ''possibleNext'' set, either ruling out or accepting each possible next state until none remain.
 We will write this very critical top-level loop now; create a new method ''getNextStates()'' in the ''Interpreter'' class:
 <code java>

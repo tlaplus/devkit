@@ -83,8 +83,7 @@ public class TlaPlus {
     }
 
     Map<String, Object> nextState = pickNext(nextStates);
-    interpreter.setNextState(nextState);
-    interpreter.step(action.location);
+    interpreter.goToState(nextState);
     System.out.println(true);
     System.out.println(nextState);
   }
