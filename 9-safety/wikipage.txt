@@ -6,4 +6,28 @@ Statements were added next, then we learned to parse conjunction & disjunction l
 Finally, we learned how to apply operators and move between states.
 Everything is in place; it is time to write a TLA⁺ model-checker.
 
+We will write a program to check TLA⁺ safety properties.
+Formally, safety properties are properties that can be disproven by a counterexample state trace of finite length.
+This is a bit abstract; in concrete terms, safety properties are expressions that evaluate to either true or false in different system states.
+Ideally, a safety property is true in //every// system state!
+Safety properties are often informally described as "nothing bad happens" properties, also called //invariants//.
+For example, when developing a multi-core CPU memory caching system, a good safety property would be that no two CPU caches ever disagree about the value stored at a given memory address.
+However, our systems often surprise us and find their ways to corners of the state space where a safety property does not hold.
+When that happens, the best way to debug the problem is to see a path from some initial state to the state violating the invariant.
+This path is what is meant by a state trace counterexample of finite length.
+It isn't enough to just produce a state violating the invariant; we must also show how the system got there!
+That is the task of this chapter.
 
+Inquisitive readers might wonder what sort of properties require counterexamples of //in//finite length.
+Those are what we call liveness properties, or "something good eventually happens" properties.
+A counterexample to something good eventually happening is a state trace ending in an infinite loop, showing it is possible for the system to run forever without ever satisfying the liveness property.
+Liveness properties (and how to check them) are a fascinating topic, but beyond the scope of this chapter.
+
+===== Exploring the State Space =====
+
+Our overall approach to checking safety properties has the following structure:
+- Parse a TLA⁺ specification, identifying the ''Init'', ''Next'', and ''Inv'' definitions.
+- Find the spec's initial state(s) satisfying ''Init''.
+- Repeatedly use ''Next'' to find all states in the system following from the initial state(s).
+- Check to ensure the ''Inv'' invariant holds in every discovered state.
+- If a state violates ''Inv'', construct a state trace leading from some initial state to the violating state.
