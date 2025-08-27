@@ -27,32 +27,34 @@ class ModelChecker {
       }
     }
 
-    ModelChecker.validate(this.init, "Init");
-    ModelChecker.validate(this.next, "Next");
-    ModelChecker.validate(this.invariantDef, "Inv");
+    validate(this.init, "Init");
+    validate(this.next, "Next");
+    validate(this.invariantDef, "Inv");
   }
 
-  private final static void validate(Stmt.OpDef op, String name) {
+  private static void validate(Stmt.OpDef op, String name) {
     if (op == null) {
-      throw new IllegalArgumentException("Spec requires '" + name + "' operator.");
+      throw new IllegalArgumentException(
+          "Spec requires '" + name + "' operator.");
     }
 
     if (!op.params.isEmpty()) {
-      throw new IllegalArgumentException("Spec '" + name + "' operator cannot take parameters.");
+      throw new IllegalArgumentException(
+          "Spec '" + name + "' operator cannot take parameters.");
     }
   }
 
   List<Map<String, Object>> checkSafety() {
-    TlaCallable invariant = (TlaCallable)interpreter.globals.get(invariantDef.name);
-    Deque<Map<String, Object>> stateQueue = new ArrayDeque<>();
+    Deque<Map<String, Object>> pendingStates = new ArrayDeque<>();
     Map<Map<String, Object>, Map<String, Object>> predecessors = new HashMap<>();
-    stateQueue.addAll(interpreter.getNextStates(init.name, init.body));
-    for (Map<String, Object> initialState : stateQueue) {
+    for (Map<String, Object> initialState : interpreter.getNextStates(init.name, init.body)) {
+      pendingStates.add(initialState);
       predecessors.put(initialState, null);
     }
 
-    while (!stateQueue.isEmpty()) {
-      Map<String, Object> current = stateQueue.pop();
+    TlaCallable invariant = (TlaCallable)interpreter.globals.get(invariantDef.name);
+    while (!pendingStates.isEmpty()) {
+      Map<String, Object> current = pendingStates.remove();
       interpreter.goToState(current);
       if (!(boolean)invariant.call(interpreter, new ArrayList<>())) {
         return reconstructStateTrace(predecessors, current);
@@ -61,7 +63,7 @@ class ModelChecker {
       for (Map<String, Object> next : interpreter.getNextStates(next.name, next.body)) {
         if (!predecessors.containsKey(next)) {
           predecessors.put(next, current);
-          stateQueue.add(next);
+          pendingStates.add(next);
         }
       }
     }

@@ -2,17 +2,17 @@
 
 This has been a long journey.
 We learned scanning, then parsing, then how to interpret basic constant expressions.
-Statements were added next, then we learned to parse conjunction & disjunction lists.
+Statements were added next, then we mastered the difficult art of parsing conjunction & disjunction lists.
 Finally, we learned how to apply operators and move between states.
 Everything is in place; it is time to write a TLA⁺ model-checker.
 
-We will write a program to check TLA⁺ safety properties.
+We will write a checker for TLA⁺ safety properties.
 Formally, safety properties are properties that can be disproven by a counterexample state trace of finite length.
 This is a bit abstract; in concrete terms, safety properties are expressions that evaluate to either true or false in different system states.
 Ideally, a safety property is true in //every// system state!
 Safety properties are often informally described as "nothing bad happens" properties, also called //invariants//.
 For example, when developing a multi-core CPU memory caching system, a good safety property would be that no two CPU caches ever disagree about the value stored at a given memory address.
-However, our systems often surprise us and find their ways to corners of the state space where a safety property does not hold.
+However, our systems often surprise us and find their way to corners of the state space where a safety property does not hold.
 When that happens, the best way to debug the problem is to see a path from some initial state to the state violating the invariant.
 This path is what is meant by a state trace counterexample of finite length.
 It isn't enough to just produce a state violating the invariant; we must also show how the system got there!
@@ -23,11 +23,189 @@ Those are what we call liveness properties, or "something good eventually happen
 A counterexample to something good eventually happening is a state trace ending in an infinite loop, showing it is possible for the system to run forever without ever satisfying the liveness property.
 Liveness properties (and how to check them) are a fascinating topic, but beyond the scope of this chapter.
 
-===== Exploring the State Space =====
+===== Initializing the Model =====
 
 Our overall approach to checking safety properties has the following structure:
-- Parse a TLA⁺ specification, identifying the ''Init'', ''Next'', and ''Inv'' definitions.
-- Find the spec's initial state(s) satisfying ''Init''.
-- Repeatedly use ''Next'' to find all states in the system following from the initial state(s).
-- Check to ensure the ''Inv'' invariant holds in every discovered state.
-- If a state violates ''Inv'', construct a state trace leading from some initial state to the violating state.
+  - Parse a TLA⁺ specification, identifying the ''Init'', ''Next'', and ''Inv'' definitions.
+  - Find the spec's initial state(s) satisfying ''Init''.
+  - Repeatedly use ''Next'' to find all states in the system following from the initial state(s).
+  - Check to ensure the ''Inv'' invariant holds in every discovered state.
+  - If a state violates ''Inv'', construct a state trace leading from some initial state to the violating state.
+
+For this purpose, create a new file ''ModelChecker.java'' and pre-emptively import all the datastructures we'll need.
+Also define a constructor accepting an ''Interpreter'' instance and a list of parsed ''Stmt'' objects comprising the TLA⁺ spec:
+<code java>
+package tla;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+class ModelChecker {
+
+  private final Interpreter interpreter;
+
+  ModelChecker(Interpreter interpreter, List<Stmt> spec) {
+    this.interpreter = interpreter;
+  }
+}
+</code>
+
+The real TLA⁺ tools allow users to identify the init, next and invariant predicates in a model configuration file.
+We skip all that and simply require our specs to have operator definitions named ''Init'', ''Next'', and ''Inv''.
+Iterate through all the spec statements to find them:
+
+<code java [highlight_lines_extra="2,3,4,8,9,10,11,12,13,14,15,16,17"]>
+  private final Interpreter interpreter;
+  private Stmt.OpDef init = null;
+  private Stmt.OpDef next = null;
+  private Stmt.OpDef invariantDef = null;
+
+  ModelChecker(Interpreter interpreter, List<Stmt> spec) {
+    this.interpreter = interpreter;
+    for (Stmt unit : spec) {
+      if (unit instanceof Stmt.OpDef) {
+        Stmt.OpDef op = (Stmt.OpDef)unit;
+        switch (op.name.lexeme) {
+          case "Init"   : this.init = op;
+          case "Next"   : this.next = op;
+          case "Inv"    : this.invariantDef = op;
+        }
+      }
+    }
+</code>
+
+We should be nice to the user and alert them if their spec is missing one of these definitions or the definition is not of the proper form.
+Add a ''validate()'' helper to the ''ModelChecker'' class:
+<code java>
+  private static void validate(Stmt.OpDef op, String name) {
+    if (op == null) {
+      throw new IllegalArgumentException(
+          "Spec requires '" + name + "' operator.");
+    }
+
+    if (!op.params.isEmpty()) {
+      throw new IllegalArgumentException(
+          "Spec '" + name + "' operator cannot take parameters.");
+    }
+  }
+</code>
+
+Then add calls to ''validate()'' at the bottom of our ''ModelChecker'' constructor:
+<code java [highlight_lines_extra="1,2,3"]>
+    validate(this.init, "Init");
+    validate(this.next, "Next");
+    validate(this.invariantDef, "Inv");
+  }
+</code>
+
+Step one complete!
+
+===== Exploring the State Space =====
+
+Now for the main event - everything has led up to this!
+Create a new ''checkSafety()'' method in the ''ModelChecker'' class:
+<code java>
+  List<Map<String, Object>> checkSafety() {
+
+    return null;
+  }
+</code>
+
+This method indicates success (the invariant holds in every state) by returning ''null''.
+If the invariant does not hold in every state, the method returns a state trace leading to the failing state.
+
+Let's talk about //how// we are going to explore the state space.
+There are many, many methods of doing this.
+We'll use [[https://en.wikipedia.org/wiki/Breadth-first_search|breadth-first search]] (BFS), which explores the state space like a ripple in a pond moving outward from the initial state(s).
+BFS has the nice property that whenever we first encounter a state, we have also found the shortest path to that state from the initial state(s).
+It works as follows:
+  - Push all initial states onto a queue of pending states, and add them to a set of visited states.
+  - While the pending state queue is not empty, pop the head state from the queue for examination.
+  - Find all next states reachable in one step from the state under examination.
+  - For each next state, if it has not already been visited then push it onto the pending state queue and add it to the set of visited states.
+
+Not too bad!
+Only two datastructures, a queue to hold the pending states and a set to record all the states we've visited.
+Assuming there are a finite number of states, BFS will eventually examine all states then terminate.
+If there are an infinite number of states - an easy-to-accomplish feat in TLA⁺ - then BFS will never terminate, but that is a user problem.
+
+There is one more thing we need to keep track of so we can reconstruct state traces: each state's predecessor, the state from which we first stepped to it.
+This combines nicely with the visited set; instead of a set of states, we use a map from states to their predecessors.
+If a state is in the predecessor map, it must have been visited.
+The predecessor of all initial states is ''null''.
+
+With all that out of the way, here's how we write the preamble to the main BFS loop in ''checkSafety()'':
+<code java [highlight_lines_extra="2,3,4,5,6,7"]>
+  List<Map<String, Object>> checkSafety() {
+    Deque<Map<String, Object>> pendingStates = new ArrayDeque<>();
+    Map<Map<String, Object>, Map<String, Object>> predecessors = new HashMap<>();
+    for (Map<String, Object> initialState : interpreter.getNextStates(init.name, init.body)) {
+      pendingStates.add(initialState);
+      predecessors.put(initialState, null);
+    }
+
+    return null;
+  }
+</code>
+
+Now all the initial states have been pushed onto the pending states queue and marked visited.
+Here is the rest of the BFS algorithm, a loop that runs in ''checkSafety()'' until the pending state queue is empty:
+<code java [highlight_lines_extra=""]>
+
+  while (!pendingStates.isEmpty()) {
+      Map<String, Object> current = pendingStates.remove();
+      interpreter.goToState(current);
+
+      for (Map<String, Object> next : interpreter.getNextStates(next.name, next.body)) {
+        if (!predecessors.containsKey(next)) {
+          predecessors.put(next, current);
+          pendingStates.add(next);
+        }
+      }
+    }
+</code>
+
+This will correctly explore the state space in breadth-first order.
+But to what end?
+
+===== Checking the Invariant =====
+
+Here we ensure the invariant holds in every discovered state.
+There is a minor design decision to be made: do we check the invariant upon first encountering a state, or later after popping it from the pending state queue?
+The latter turns out to be simpler because no special logic is necessary for the initial states, so that is what we do; add the highlighted code to ''checkSafety()'':
+<code java [highlight_lines_extra="1,5,6,7"]>
+    TlaCallable invariant = (TlaCallable)interpreter.globals.get(invariantDef.name);
+    while (!pendingStates.isEmpty()) {
+      Map<String, Object> current = pendingStates.remove();
+      interpreter.goToState(current);
+      if (!(boolean)invariant.call(interpreter, new ArrayList<>())) {
+        return reconstructStateTrace(predecessors, current);
+      }
+</code>
+
+If the invariant fails then we return a state trace!
+How do we construct that trace?
+Here is how to implement the ''reconstructStateTrace()'' helper for the ''ModelChecker'' class:
+<code java>
+  List<Map<String, Object>> reconstructStateTrace(
+      Map<Map<String, Object>, Map<String, Object>> predecessors,
+      Map<String, Object> state
+  ) {
+    List<Map<String, Object>> trace = new ArrayList<>();
+    Map<String, Object> predecessor = state;
+    do {
+      trace.add(predecessor);
+      predecessor = predecessors.get(predecessor);
+    } while (predecessor != null);
+    return trace.reversed();
+  }
+</code>
+
+Done!
+We have successfully implemented a TLA⁺ model checker for safety properties!
+All that remains is to wire it up to the front-end.
+
