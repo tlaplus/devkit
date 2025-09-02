@@ -262,7 +262,8 @@ The simplest place to call the model-checker is at the bottom of the ''run()'' m
 
 Now we can model-check TLA⁺ specs!
 What's a good first example?
-I rewrote the [[https://github.com/tlaplus/Examples/blob/a3ecae105ce41d4ed50bc960d50c9adf36b446f3/specifications/DieHard/DieHarder.tla|Generalized Die Hard]] jugs puzzle spec in our minimal TLA⁺ language subset; here it is:
+The traditional "hello world" model-checking problem is the water jugs puzzle from the movie Die Hard 3, which you can watch [[https://www.youtube.com/watch?v=BVtQNK_ZUJg|here]].
+I rewrote the [[https://github.com/tlaplus/Examples/blob/a3ecae105ce41d4ed50bc960d50c9adf36b446f3/specifications/DieHard/DieHarder.tla|Generalized Die Hard]] puzzle spec in our minimal TLA⁺ language subset; here it is:
 
 <code haskell>
 Jug == 1 .. 2
@@ -325,6 +326,15 @@ We have now implemented the core of a minimal TLA⁺ model-checker for safety pr
 One chapter remains, clarifying how operator parameters interact with the prime operator.
 It's important to understand, although somewhat optional to implement.
 Read it [[creating:closures|here]]!
+
+====== Challenges ======
+
+Here are some optional challenges to flesh out your TLA⁺ model-checker, roughly ranked from simplest to most difficult.
+You should save a copy of your code before attempting these.
+  - The state trace presentation leaves something to be desired; override the ''toString()'' method on the ''StateTrace'' and ''Step'' records to give a more readable presentation of the state trace.
+  - To save on memory, real finite-state model-checkers like TLC don't store the entire state in the ''predecessors'' map; instead, they store 64-bit hashes of each state. It is very important that hash collisions (two separate states hashing to the same value) never occur, or the correctness of the model-checker becomes compromised. Java provides a built-in ''hashCode()'' method for each object that returns a 32-bit ''int'' hash of its contents. Modify your ''predecessors'' map to use this hash code. Is this sufficient? Do you encounter any collisions?
+  - Ignoring the safety issues with using Java's built-in ''hashCode()'', modify the ''reconstructStateTrace()'' method to work with a hash-based ''predecessor'' map instead of a state-based one. How does it become more difficult?
+  - Currently, our code only specifies ''Init'' or ''Next'' as the action taken at each step in a state trace. It would be nice if it were more specific and output ''FillJug(1)'', ''EmptyJug(2)'', or ''JugToJug(1, 2)'', for example. Modify the ''reconstructStateTrace()'' method to break down the ''Init'' and ''Next'' actions to make a best effort to identify the sub-action taken. This will involve analyzing existential quantification and disjunction expressions.
 
 [[creating:actions|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:closures|Next Page >]]
 
