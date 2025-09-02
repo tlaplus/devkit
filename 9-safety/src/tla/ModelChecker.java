@@ -9,10 +9,14 @@ import java.util.Map;
 
 class ModelChecker {
 
+  record Step(String action, Map<String, Object> state) { }
+
+  record StateTrace(String failingInvariant, List<Step> trace) { }
+
   private final Interpreter interpreter;
   private Stmt.OpDef init = null;
   private Stmt.OpDef next = null;
-  private Stmt.OpDef invariantDef = null;
+  private List<Stmt.OpDef> invariants = new ArrayList<>();
 
   ModelChecker(Interpreter interpreter, List<Stmt> spec) {
     this.interpreter = interpreter;
@@ -20,16 +24,18 @@ class ModelChecker {
       if (unit instanceof Stmt.OpDef) {
         Stmt.OpDef op = (Stmt.OpDef)unit;
         switch (op.name.lexeme) {
-          case "Init"   : this.init = op;
-          case "Next"   : this.next = op;
-          case "Inv"    : this.invariantDef = op;
+          case "Init"   : init = op; break;
+          case "Next"   : next = op; break;
+          case "Inv"    : invariants.add(op); break;
+          case "TypeOK" : invariants.add(op); break;
+          case "Safety" : invariants.add(op); break;
         }
       }
     }
 
-    validate(this.init, "Init");
-    validate(this.next, "Next");
-    validate(this.invariantDef, "Inv");
+    validate(init, "Init");
+    validate(next, "Next");
+    for (Stmt.OpDef inv : invariants) validate(inv, inv.name.lexeme);
   }
 
   private static void validate(Stmt.OpDef op, String name) {
@@ -44,20 +50,21 @@ class ModelChecker {
     }
   }
 
-  List<Map<String, Object>> checkSafety() {
+  StateTrace checkSafety() {
     Deque<Map<String, Object>> pendingStates = new ArrayDeque<>();
     Map<Map<String, Object>, Map<String, Object>> predecessors = new HashMap<>();
     for (Map<String, Object> initialState : interpreter.getNextStates(init.name, init.body)) {
-      pendingStates.add(initialState);
       predecessors.put(initialState, null);
+      pendingStates.add(initialState);
     }
 
-    TlaCallable invariant = (TlaCallable)interpreter.globals.get(invariantDef.name);
     while (!pendingStates.isEmpty()) {
       Map<String, Object> current = pendingStates.remove();
       interpreter.goToState(current);
-      if (!(boolean)invariant.call(interpreter, new ArrayList<>())) {
-        return reconstructStateTrace(predecessors, current);
+      for (Stmt.OpDef invariant : invariants) {
+        if (!(boolean)invariant.body.accept(interpreter)) {
+          return reconstructStateTrace(predecessors, current, invariant);
+        }
       }
 
       for (Map<String, Object> next : interpreter.getNextStates(next.name, next.body)) {
@@ -71,9 +78,10 @@ class ModelChecker {
     return null;
   }
 
-  List<Map<String, Object>> reconstructStateTrace(
+  StateTrace reconstructStateTrace(
       Map<Map<String, Object>, Map<String, Object>> predecessors,
-      Map<String, Object> state
+      Map<String, Object> state,
+      Stmt.OpDef invariant
   ) {
     List<Map<String, Object>> trace = new ArrayList<>();
     Map<String, Object> predecessor = state;
@@ -81,6 +89,15 @@ class ModelChecker {
       trace.add(predecessor);
       predecessor = predecessors.get(predecessor);
     } while (predecessor != null);
-    return trace.reversed();
+    trace = trace.reversed();
+
+    List<Step> steps = new ArrayList<>();
+    Stmt.OpDef action = init;
+    for (Map<String, Object> nextState : trace) {
+      steps.add(new Step(action.name.lexeme, nextState));
+      action = next;
+    }
+
+    return new StateTrace(invariant.name.lexeme, steps);
   }
 }

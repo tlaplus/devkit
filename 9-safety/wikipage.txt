@@ -26,11 +26,11 @@ Liveness properties (and how to check them) are a fascinating topic, but beyond 
 ===== Initializing the Model =====
 
 Our overall approach to checking safety properties has the following structure:
-  - Parse a TLA⁺ specification, identifying the ''Init'', ''Next'', and ''Inv'' definitions.
+  - Parse a TLA⁺ specification, identifying ''Init'', ''Next'', and the invariants.
   - Find the spec's initial state(s) satisfying ''Init''.
   - Repeatedly use ''Next'' to find all states in the system following from the initial state(s).
-  - Check to ensure the ''Inv'' invariant holds in every discovered state.
-  - If a state violates ''Inv'', construct a state trace leading from some initial state to the violating state.
+  - Check to ensure the invariants hold in every discovered state.
+  - If a state violates an invariant, construct a state trace leading from some initial state to the violating state.
 
 For this purpose, create a new file ''ModelChecker.java'' and pre-emptively import all the datastructures we'll need.
 Also define a constructor accepting an ''Interpreter'' instance and a list of parsed ''Stmt'' objects comprising the TLA⁺ spec:
@@ -55,14 +55,14 @@ class ModelChecker {
 </code>
 
 The real TLA⁺ tools allow users to identify the init, next and invariant predicates in a model configuration file.
-We skip all that and simply require our specs to have operator definitions named ''Init'', ''Next'', and ''Inv''.
+We skip all that and simply require our specs to have operator definitions named ''Init'', ''Next'', and a few options for invariants.
 Iterate through all the spec statements to find them:
 
-<code java [highlight_lines_extra="2,3,4,8,9,10,11,12,13,14,15,16,17"]>
+<code java [highlight_lines_extra="2,3,4,8,9,10,11,12,13,14,15,16,17,18,19"]>
   private final Interpreter interpreter;
   private Stmt.OpDef init = null;
   private Stmt.OpDef next = null;
-  private Stmt.OpDef invariantDef = null;
+  private List<Stmt.OpDef> invariants = new ArrayList<>();
 
   ModelChecker(Interpreter interpreter, List<Stmt> spec) {
     this.interpreter = interpreter;
@@ -70,9 +70,11 @@ Iterate through all the spec statements to find them:
       if (unit instanceof Stmt.OpDef) {
         Stmt.OpDef op = (Stmt.OpDef)unit;
         switch (op.name.lexeme) {
-          case "Init"   : this.init = op;
-          case "Next"   : this.next = op;
-          case "Inv"    : this.invariantDef = op;
+          case "Init"   : init = op; break;
+          case "Next"   : next = op; break;
+          case "Inv"    : invariants.add(op); break;
+          case "TypeOK" : invariants.add(op); break;
+          case "Safety" : invariants.add(op); break;
         }
       }
     }
@@ -96,12 +98,12 @@ Add a ''validate()'' helper to the ''ModelChecker'' class:
 
 Then add calls to ''validate()'' at the bottom of our ''ModelChecker'' constructor:
 <code java [highlight_lines_extra="1,2,3"]>
-    validate(this.init, "Init");
-    validate(this.next, "Next");
-    validate(this.invariantDef, "Inv");
+    validate(init, "Init");
+    validate(next, "Next");
+    for (Stmt.OpDef inv : invariants) validate(inv, inv.name.lexeme);
   }
 </code>
-
+As written it is possible for users to define no invariants at all, which is fine.
 Step one complete!
 
 ===== Exploring the State Space =====
@@ -109,14 +111,23 @@ Step one complete!
 Now for the main event - everything has led up to this!
 Create a new ''checkSafety()'' method in the ''ModelChecker'' class:
 <code java>
-  List<Map<String, Object>> checkSafety() {
+  StateTrace checkSafety() {
 
     return null;
   }
 </code>
 
-This method indicates success (the invariant holds in every state) by returning ''null''.
-If the invariant does not hold in every state, the method returns a state trace leading to the failing state.
+This method indicates success (the invariants holds in every state) by returning ''null''.
+If the invariants do not hold in every state, the method returns a state trace leading to the failing state.
+Define the ''StateTrace'' record near the top of the ''ModelChecker'' class:
+<code java [highlight_lines_extra="3,4"]>
+class ModelChecker {
+
+  record Step(String action, Map<String, Object> state) { }
+  record StateTrace(String failingInvariant, List<Step> trace) { }
+
+  private final Interpreter interpreter;
+</code>
 
 Let's talk about //how// we are going to explore the state space.
 There are many, many methods of doing this.
@@ -139,13 +150,17 @@ If a state is in the predecessor map, it must have been visited.
 The predecessor of all initial states is ''null''.
 
 With all that out of the way, here's how we write the preamble to the main BFS loop in ''checkSafety()'':
-<code java [highlight_lines_extra="2,3,4,5,6,7"]>
-  List<Map<String, Object>> checkSafety() {
+<code java [highlight_lines_extra="2,3,4,5,6,7,9,11"]>
+  StateTrace checkSafety() {
     Deque<Map<String, Object>> pendingStates = new ArrayDeque<>();
     Map<Map<String, Object>, Map<String, Object>> predecessors = new HashMap<>();
     for (Map<String, Object> initialState : interpreter.getNextStates(init.name, init.body)) {
-      pendingStates.add(initialState);
       predecessors.put(initialState, null);
+      pendingStates.add(initialState);
+    }
+
+    while (!pendingStates.isEmpty()) {
+
     }
 
     return null;
@@ -154,9 +169,8 @@ With all that out of the way, here's how we write the preamble to the main BFS l
 
 Now all the initial states have been pushed onto the pending states queue and marked visited.
 Here is the rest of the BFS algorithm, a loop that runs in ''checkSafety()'' until the pending state queue is empty:
-<code java [highlight_lines_extra=""]>
-
-  while (!pendingStates.isEmpty()) {
+<code java [highlight_lines_extra="2,3,5,6,7,8,9,10"]>
+    while (!pendingStates.isEmpty()) {
       Map<String, Object> current = pendingStates.remove();
       interpreter.goToState(current);
 
@@ -172,28 +186,30 @@ Here is the rest of the BFS algorithm, a loop that runs in ''checkSafety()'' unt
 This will correctly explore the state space in breadth-first order.
 But to what end?
 
-===== Checking the Invariant =====
+===== Checking the Invariants =====
 
-Here we ensure the invariant holds in every discovered state.
-There is a minor design decision to be made: do we check the invariant upon first encountering a state, or later after popping it from the pending state queue?
+Here we ensure the invariants hold in every discovered state.
+There is a minor design decision to be made: do we check the invariants upon first encountering a state, or later after popping it from the pending state queue?
 The latter turns out to be simpler because no special logic is necessary for the initial states, so that is what we do; add the highlighted code to ''checkSafety()'':
-<code java [highlight_lines_extra="1,5,6,7"]>
-    TlaCallable invariant = (TlaCallable)interpreter.globals.get(invariantDef.name);
+<code java [highlight_lines_extra="4,5,6,7,8"]>
     while (!pendingStates.isEmpty()) {
       Map<String, Object> current = pendingStates.remove();
       interpreter.goToState(current);
-      if (!(boolean)invariant.call(interpreter, new ArrayList<>())) {
-        return reconstructStateTrace(predecessors, current);
+      for (Stmt.OpDef invariant : invariants) {
+        if (!(boolean)invariant.body.accept(interpreter)) {
+          return reconstructStateTrace(predecessors, current, invariant);
+        }
       }
 </code>
 
-If the invariant fails then we return a state trace!
+If an invariant fails then we return a state trace!
 How do we construct that trace?
-Here is how to implement the ''reconstructStateTrace()'' helper for the ''ModelChecker'' class:
+Here is how to implement the ''reconstructStateTrace()'' helper for the ''ModelChecker'' class; first, use the ''predecessors'' graph to walk backward from the failing state to an initial state, then reverse the list of states:
 <code java>
   List<Map<String, Object>> reconstructStateTrace(
       Map<Map<String, Object>, Map<String, Object>> predecessors,
-      Map<String, Object> state
+      Map<String, Object> state,
+      Stmt.OpDef invariant
   ) {
     List<Map<String, Object>> trace = new ArrayList<>();
     Map<String, Object> predecessor = state;
@@ -201,11 +217,114 @@ Here is how to implement the ''reconstructStateTrace()'' helper for the ''ModelC
       trace.add(predecessor);
       predecessor = predecessors.get(predecessor);
     } while (predecessor != null);
-    return trace.reversed();
+    trace =  trace.reversed();
+
+  }
+</code>
+
+Then, convert the list of states into a ''StateTrace'' object, augmenting the list of states with information about the failed invariant and the action taken at each step:
+<code java [highlight_lines_extra="3,4,5,6,7,8,10"]>
+    trace = trace.reversed();
+
+    List<Step> steps = new ArrayList<>();
+    Stmt.OpDef action = init;
+    for (Map<String, Object> nextState : trace) {
+      steps.add(new Step(action.name.lexeme, nextState));
+      action = next;
+    }
+
+    return new StateTrace(invariant.name.lexeme, steps);
   }
 </code>
 
 Done!
-We have successfully implemented a TLA⁺ model checker for safety properties!
-All that remains is to wire it up to the front-end.
+We have successfully implemented a TLA⁺ model-checker for safety properties!
+
+===== Hooking Up the Front-End =====
+
+Now we modify ''TlaPlus.java'' to run the model-checker when given a TLA⁺ source file.
+In past chapters we've focused on running TLA⁺ in a REPL where users can evaluate expressions and transition between states.
+Full TLA⁺ source files cannot be run as programs; all we can do is model-check them.
+
+The simplest place to call the model-checker is at the bottom of the ''run()'' method in the ''TlaPlus'' class; add this code:
+<code java [highlight_lines_extra="1,2,3,4,5,6,7,8,9"]>
+    if (!replMode) {
+      ModelChecker mc = new ModelChecker(interpreter, statements);
+      ModelChecker.StateTrace trace = mc.checkSafety();
+      System.out.println(
+          trace == null
+          ? "Invariants hold on state space."
+          : "Invariants do not hold; trace:\n" + trace
+      );
+    }
+  }
+</code>
+
+Now we can model-check TLA⁺ specs!
+What's a good first example?
+I rewrote the [[https://github.com/tlaplus/Examples/blob/a3ecae105ce41d4ed50bc960d50c9adf36b446f3/specifications/DieHard/DieHarder.tla|Generalized Die Hard]] jugs puzzle spec in our minimal TLA⁺ language subset; here it is:
+
+<code haskell>
+Jug == 1 .. 2
+Capacity == [
+  j \in Jug |->
+      IF j = 1 THEN 3
+      ELSE IF j = 2 THEN 5
+      ELSE 0
+]
+Goal == 4
+
+VARIABLE contents
+
+Min(m, n) == IF m < n THEN m ELSE n
+
+FillJug(target) ==
+  contents' = [
+    j \in Jug |->
+      IF j = target THEN Capacity[j] ELSE contents[j]
+  ]
+
+EmptyJug(target) ==
+  contents' = [
+    j \in Jug |->
+      IF j = target THEN 0 ELSE contents[j]
+  ]
+
+JugToJug(from, to) ==
+  /\ ~(from = to)
+  /\ contents' = [
+      j \in Jug |->
+        IF j = from THEN
+          contents[j] - Min(contents[from], Capacity[to] - contents[to])
+        ELSE IF j = to THEN
+          contents[j] + Min(contents[from], Capacity[to] - contents[to])
+        ELSE
+          contents[j]
+    ]
+
+TypeOK == \A j \in Jug : contents[j] \in 0 .. Capacity[j]
+
+Init == contents = [j \in Jug |-> 0]
+
+Next ==
+  \E j \in Jug :
+    \/ FillJug(j)
+    \/ EmptyJug(j)
+    \/ \E k \in Jug : JugToJug(j, k)
+
+Inv == \A j \in Jug : ~(contents[j] = Goal)
+</code>
+
+You can vary the problem definition by modifying the definition of ''Jug'' and the ''Capacity'' map.
+As-is, it checks the classic Die Hard jugs puzzle with one 3-gallon jug and one 5-gallon jug.
+We set the invariant to assert that no jug will every contain 4 gallons of water.
+When run on this spec, our model-checker spits out a state trace showing how to get 4 gallons of water in the 5-gallon jug!
+
+After all the preliminary work, this chapter was surprisingly short.
+We have now implemented the core of a minimal TLA⁺ model-checker for safety properties.
+One chapter remains, clarifying how operator parameters interact with the prime operator.
+It's important to understand, although somewhat optional to implement.
+Read it [[creating:closures|here]]!
+
+[[creating:actions|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]] | [[creating:closures|Next Page >]]
 

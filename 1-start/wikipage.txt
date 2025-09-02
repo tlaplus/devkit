@@ -18,6 +18,8 @@ Approaching TLA⁺ from the perspective of an implementer will also bring you be
 Developing an intuition of what TLC is doing when it model-checks your spec will enable you to write specifications that make better use of its capabilities.
 And, if you reach the edge of those capabilities - well, you're well-placed to extend TLC to handle it!
 
+This guide was written with the generous support of the [[https://foundation.tlapl.us/|TLA⁺ Foundation]].
+
 ===== Table of Contents =====
 
   - [[creating:start|Introduction (this page)]]
@@ -36,7 +38,7 @@ And, if you reach the edge of those capabilities - well, you're well-placed to e
 This tutorial uses Java.
 There are two good reasons for this:
   - At time of writing, [[codebase:start|the most mature TLA⁺ tools]] are written in Java, and this tutorial prepares you to work on them.
-  - The high-quality free online textbook //[[https://craftinginterpreters.com/contents.html|Crafting Interpreters]]// by Robert Nystrom uses Java, and this tutorial is a simple TLA⁺-themed wrapper around its concepts. That book states its own reasons for using Java, which you can read.
+  - The high-quality free online textbook //[[https://craftinginterpreters.com/contents.html|Crafting Interpreters]]// by Robert Nystrom uses Java, and this tutorial is largely a TLA⁺-themed wrapper around its concepts. That book states its own reasons for using Java, which you can read.
 
 You will need to install the [[https://adoptium.net/|Java Development Kit]] appropriate for your system.
 This tutorial requires Java 21 or higher, for the Java 17 [[https://openjdk.org/jeps/395|records]] feature and the Java 21 ''[[https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/SequencedCollection.html#reversed()|reversed()]]'' method.
