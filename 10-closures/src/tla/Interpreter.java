@@ -65,8 +65,10 @@ class Interpreter implements Expr.Visitor<Object>,
     return new ArrayList<>(confirmedNext);
   }
 
-  void setNextState(Map<String, Object> next) {
-    this.next = next;
+  void goToState(Map<String, Object> state) {
+    current = state;
+    primed = state == null;
+    clearNext();
   }
 
   Object executeBlock(Expr expr, Environment environment) {
@@ -77,17 +79,6 @@ class Interpreter implements Expr.Visitor<Object>,
     } finally {
       this.environment = previous;
     }
-  }
-
-  void step(Token location) {
-    if (!isComplete()) {
-      throw new RuntimeError(location,
-          "Cannot step to incomplete next state.");
-    }
-
-    primed = false;
-    current = next;
-    clearNext();
   }
 
   private boolean isComplete() {
@@ -161,8 +152,7 @@ class Interpreter implements Expr.Visitor<Object>,
         return set;
       case IN:
         checkSetOperand(expr.operator, right);
-        if (left instanceof UnboundVariable) {
-          UnboundVariable var = (UnboundVariable)left;
+        if (left instanceof UnboundVariable var) {
           Map<String, Object> trunk = next;
           for (Object element : (Set<?>)right) {
             next = new HashMap<>(trunk);
@@ -183,8 +173,7 @@ class Interpreter implements Expr.Visitor<Object>,
         checkNumberOperands(expr.operator, left, right);
         return (int)left < (int)right;
       case EQUAL:
-        if (left instanceof UnboundVariable) {
-          UnboundVariable var = (UnboundVariable)left;
+        if (left instanceof UnboundVariable var) {
           checkIsValue(right);
           next.put(var.name().lexeme, right);
           return true;
@@ -301,7 +290,9 @@ class Interpreter implements Expr.Visitor<Object>,
       case PRIME: {
         if (primed) {
           throw new RuntimeError(expr.operator,
-              "Cannot double-prime expression nor prime initial state.");
+              current == null
+              ? "Cannot prime expression in initial state."
+              : "Cannot double-prime expression.");
         } try {
           primed = true;
           return evaluate(expr.expr);
@@ -388,8 +379,7 @@ class Interpreter implements Expr.Visitor<Object>,
 
   private void checkIsValue(Object... operands) {
     for (Object operand : operands) {
-      if (operand instanceof UnboundVariable) {
-        UnboundVariable var = (UnboundVariable)operand;
+      if (operand instanceof UnboundVariable var) {
         throw new RuntimeError(var.name(), "Use of unbound variable.");
       }
     }

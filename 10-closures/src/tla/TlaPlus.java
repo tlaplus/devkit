@@ -61,10 +61,20 @@ public class TlaPlus {
 
     System.out.println(new AstPrinter().print(statements));
     if (replMode && statements.size() == 1
-        && statements.get(0) instanceof Stmt.Print) {
-      tryStep((Stmt.Print)statements.get(0));
+        && statements.get(0) instanceof Stmt.Print action) {
+      tryStep(action);
     } else {
       interpreter.interpret(statements);
+    }
+
+    if (!replMode) {
+      ModelChecker mc = new ModelChecker(interpreter, statements);
+      ModelChecker.StateTrace trace = mc.checkSafety();
+      System.out.println(
+          trace == null
+          ? "Invariants hold on state space."
+          : "Invariants do not hold; trace:\n" + trace
+      );
     }
   }
 
@@ -83,8 +93,7 @@ public class TlaPlus {
     }
 
     Map<String, Object> nextState = pickNext(nextStates);
-    interpreter.setNextState(nextState);
-    interpreter.step(action.location);
+    interpreter.goToState(nextState);
     System.out.println(true);
     System.out.println(nextState);
   }

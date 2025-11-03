@@ -152,8 +152,7 @@ class Interpreter implements Expr.Visitor<Object>,
         return set;
       case IN:
         checkSetOperand(expr.operator, right);
-        if (left instanceof UnboundVariable) {
-          UnboundVariable var = (UnboundVariable)left;
+        if (left instanceof UnboundVariable var) {
           Map<String, Object> trunk = next;
           for (Object element : (Set<?>)right) {
             next = new HashMap<>(trunk);
@@ -174,8 +173,7 @@ class Interpreter implements Expr.Visitor<Object>,
         checkNumberOperands(expr.operator, left, right);
         return (int)left < (int)right;
       case EQUAL:
-        if (left instanceof UnboundVariable) {
-          UnboundVariable var = (UnboundVariable)left;
+        if (left instanceof UnboundVariable var) {
           checkIsValue(right);
           next.put(var.name().lexeme, right);
           return true;
@@ -381,8 +379,7 @@ class Interpreter implements Expr.Visitor<Object>,
 
   private void checkIsValue(Object... operands) {
     for (Object operand : operands) {
-      if (operand instanceof UnboundVariable) {
-        UnboundVariable var = (UnboundVariable)operand;
+      if (operand instanceof UnboundVariable var) {
         throw new RuntimeError(var.name(), "Use of unbound variable.");
       }
     }

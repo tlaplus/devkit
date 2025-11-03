@@ -251,12 +251,9 @@ class Parser {
   }
 
   private Expr.Variadic asVariadicOp(Token op, Expr expr) {
-    if (expr instanceof Expr.Variadic) {
-      Expr.Variadic vExpr = (Expr.Variadic)expr;
-      if (vExpr.operator.type == op.type) return vExpr;
-    }
-
-    return null;
+    return
+      expr instanceof Expr.Variadic vExpr && vExpr.operator.type == op.type
+      ? vExpr : null;
   }
 
   private Parser lookahead() {

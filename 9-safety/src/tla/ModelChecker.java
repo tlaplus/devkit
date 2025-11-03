@@ -21,14 +21,13 @@ class ModelChecker {
   ModelChecker(Interpreter interpreter, List<Stmt> spec) {
     this.interpreter = interpreter;
     for (Stmt unit : spec) {
-      if (unit instanceof Stmt.OpDef) {
-        Stmt.OpDef op = (Stmt.OpDef)unit;
+      if (unit instanceof Stmt.OpDef op) {
         switch (op.name.lexeme) {
-          case "Init"   : init = op; break;
-          case "Next"   : next = op; break;
-          case "Inv"    : invariants.add(op); break;
-          case "TypeOK" : invariants.add(op); break;
-          case "Safety" : invariants.add(op); break;
+          case "Init"   -> init = op;
+          case "Next"   -> next = op;
+          case "Inv"    -> invariants.add(op);
+          case "TypeOK" -> invariants.add(op);
+          case "Safety" -> invariants.add(op);
         }
       }
     }

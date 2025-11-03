@@ -61,8 +61,8 @@ public class TlaPlus {
 
     System.out.println(new AstPrinter().print(statements));
     if (replMode && statements.size() == 1
-        && statements.get(0) instanceof Stmt.Print) {
-      tryStep((Stmt.Print)statements.get(0));
+        && statements.get(0) instanceof Stmt.Print action) {
+      tryStep(action);
     } else {
       interpreter.interpret(statements);
     }

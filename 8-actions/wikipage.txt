@@ -197,10 +197,9 @@ We can retrieve state variable values, but what about assigning them?
 To start, let's handle the simple case of expressions of the form ''x' = expr''.
 This requires modifying the ''EQUAL'' case of ''visitBinaryExpr()'' in the ''Interpreter'' class.
 If the ''left'' operand is an ''UnboundVariable'' instance, then bind the ''left'' state variable to the value of ''right'':
-<code java [highlight_lines_extra="2,3,4,5,6"]>
+<code java [highlight_lines_extra="2,3,4,5"]>
       case EQUAL:
-        if (left instanceof UnboundVariable) {
-          UnboundVariable var = (UnboundVariable)left;
+        if (left instanceof UnboundVariable var) {
           next.put(var.name().lexeme, right);
           return true;
         }
@@ -338,11 +337,10 @@ Modify the ''OR'' handling code in ''visitVariadicExpr()'' as highlighted:
 There are two other operators to support for binding state variables: the set membership ''\in'' operator, and the ''\E'' existential quantification operator.
 Actions like ''x' \in {0, 1}'' or ''\E v \in {0, 1} : x' = v'' are equivalent to ''x' = 0 \/ x' = 1''.
 Add the following code to the ''IN'' case in ''visitBinaryExpr()'':
-<code java [highlight_lines_extra="3,4,5,6,7,8,9,10,11,12,13"]>
+<code java [highlight_lines_extra="3,4,5,6,7,8,9,10,11,12"]>
       case IN:
         checkSetOperand(expr.operator, right);
-        if (left instanceof UnboundVariable) {
-          UnboundVariable var = (UnboundVariable)left;
+        if (left instanceof UnboundVariable var) {
           Map<String, Object> trunk = next;
           for (Object element : (Set<?>)right) {
             next = new HashMap<>(trunk);
@@ -409,8 +407,7 @@ Near the bottom of the ''Interpreter'' class, create a new helper method ''check
 <code java>
   private void checkIsValue(Object... operands) {
     for (Object operand : operands) {
-      if (operand instanceof UnboundVariable) {
-        UnboundVariable var = (UnboundVariable)operand;
+      if (operand instanceof UnboundVariable var) {
         throw new RuntimeError(var.name(), "Use of unbound variable.");
       }
     }
@@ -419,10 +416,9 @@ Near the bottom of the ''Interpreter'' class, create a new helper method ''check
 
 In our ''EQUALS'' handling logic, we can only bind the value of ''right'' to a variable if ''right'' has a defined concrete value.
 Also, two values can only be compared for equality if they are both defined:
-<code java [highlight_lines_extra="4,8"]>
+<code java [highlight_lines_extra="3,7"]>
       case EQUAL:
-        if (left instanceof UnboundVariable) {
-          UnboundVariable var = (UnboundVariable)left;
+        if (left instanceof UnboundVariable var) {
           checkIsValue(right);
           next.put(var.name().lexeme, right);
           return true;
@@ -475,8 +471,8 @@ For this, add the following code to the bottom of the ''run()'' method in the ''
     if (hadError) return;
 
     if (replMode && statements.size() == 1
-        && statements.get(0) instanceof Stmt.Print) {
-      tryStep((Stmt.Print)statements.get(0));
+        && statements.get(0) instanceof Stmt.Print action) {
+      tryStep(action);
     } else {
       interpreter.interpret(statements);
     }
