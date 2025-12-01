@@ -179,8 +179,8 @@ class Parser {
   private Expr flattenJLists(Token op, List<Expr> juncts) {
     List<Expr> flattened = new ArrayList<>();
     for (Expr junct : juncts) {
-      Expr.Variadic vjunct;
-      if ((vjunct = asVariadicOp(op, junct)) != null) {
+      if (junct instanceof Expr.Variadic vjunct
+          && vjunct.operator.type == op.type) {
         flattened.addAll(vjunct.parameters);
       } else {
         flattened.add(junct);
@@ -188,12 +188,6 @@ class Parser {
     }
 
     return new Expr.Variadic(op, flattened);
-  }
-
-  private Expr.Variadic asVariadicOp(Token op, Expr expr) {
-    return
-      expr instanceof Expr.Variadic vExpr && vExpr.operator.type == op.type
-      ? vExpr : null;
   }
 
   private Parser lookahead() {
