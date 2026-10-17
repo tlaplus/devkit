@@ -2,9 +2,9 @@ package tla;
 
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.stream.Stream;
 
@@ -25,16 +25,14 @@ public class TestOperatorPrecedence {
     final String msg = String.format("%s|%s|%s|%b\n", left.token(), right.token(), input, conflicts);
     System.out.println(msg);
     try (IOCapture io = new IOCapture()) {
-      Scanner s = new Scanner(input);
-      Parser p = new Parser(s.scanTokens());
-      Expr actual = p.parse();
+      final Scanner s = new Scanner("(" + input + ")");
+      final Parser p = new Parser(s.scanTokens());
+      final Expr parsed = p.parse();
       if (conflicts) {
-        if (actual != null) {
-          assertFalse(isCompleteParse(actual), msg);
-        }
+        assertNull(parsed, msg);
       } else {
-        assertNotNull(actual, msg + io.getErr());
-        assertTrue(isCompleteParse(actual), msg);
+        assertNotNull(parsed, msg + io.getErr());
+        final Expr actual = assertInstanceOf(Expr.Grouping.class, parsed).expression;
         final TokenType lowerPrecOpSymbol = getOpToken(actual);
         final TokenType higherPrecOpSymbol = getHigherPrecOp(actual);
         if (left == right) {
@@ -138,16 +136,6 @@ public class TestOperatorPrecedence {
     }
   }
   
-  private boolean isCompleteParse(Expr expr) {
-    if (expr instanceof Expr.Binary bExpr) {
-      return !(bExpr.left instanceof Expr.Literal && bExpr.right instanceof Expr.Literal);
-    } else if (expr instanceof Expr.Unary uExpr) {
-      return !(uExpr.expr instanceof Expr.Literal);
-    } else {
-      throw new RuntimeException("Invalid expression type: " + expr.getClass().descriptorString());
-    }
-  }
-
   private static TokenType getOpToken(Expr expr) {
     if (expr instanceof Expr.Binary bExpr) {
       return bExpr.operator.type;

@@ -32,7 +32,7 @@ class Parser {
 
   private Expr operatorExpression(int prec) {
     Operator op;
-    while ((op = matchOp(Fix.PREFIX, prec)) != null) {
+    if ((op = matchOp(Fix.PREFIX, prec)) != null) {
       Token opToken = previous();
       Expr expr = operatorExpression(op.assoc ? op.lowPrec : op.highPrec + 1);
       return new Expr.Unary(opToken, expr);
@@ -51,7 +51,6 @@ class Parser {
     while ((op = matchOp(Fix.POSTFIX, prec)) != null) {
       Token opToken = previous();
       expr = new Expr.Unary(opToken, expr);
-      if (!op.assoc) break;
     }
 
     return expr;
@@ -111,9 +110,11 @@ class Parser {
 
   private Operator matchOp(Fix fix, int prec) {
     for (Operator op : operators) {
-      if (op.fix == fix && (op.lowPrec == prec || op.fix == Fix.PREFIX)) {
-        if (match(op.token)) return op;
-      }
+      if (op.fix != fix) continue;
+      boolean eligible = op.fix == Fix.PREFIX
+          ? op.lowPrec <= prec
+          : op.lowPrec == prec;
+      if (eligible && match(op.token)) return op;
     }
 
     return null;
