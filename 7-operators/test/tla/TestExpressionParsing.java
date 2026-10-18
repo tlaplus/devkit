@@ -44,6 +44,7 @@ public class TestExpressionParsing {
   public void testUnaryAssociativity() {
     checkEqual("~~1", "(~ (~ 1))");
     checkEqual("--1", "(- (- 1))");
+    checkEqual("ENABLED ENABLED TRUE", "(ENABLED (ENABLED true))");
   }
 
   @Test
@@ -68,7 +69,6 @@ public class TestExpressionParsing {
 
   @Test
   public void testPrecedence() {
-    checkEqual("1 /\\ 2 \\/ 3", "(\\/ (/\\ 1 2) 3)");
     checkEqual("1 /\\ 2 \\in 3", "(/\\ 1 (\\in 2 3))");
     checkEqual("1 /\\ 2 = 3", "(/\\ 1 (= 2 3))");
     checkEqual("1 /\\ 2 < 3", "(/\\ 1 (< 2 3))");
@@ -83,7 +83,14 @@ public class TestExpressionParsing {
 
   @Test
   public void testAssociativityErrors() {
-    checkError("ENABLED ENABLED TRUE");
+    checkError("1 = 2 = 3");
+  }
+
+  @Test
+  public void testPrecedenceRangeConflicts() {
+    checkError("1 + ENABLED 2 + 3");
+    checkError("1 /\\ 2 \\/ 3");
+    checkError("1 \\/ 2 /\\ 3");
   }
 
   @Test
