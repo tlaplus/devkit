@@ -6,8 +6,8 @@ import java.util.ArrayList;
 import static tla.TokenType.*;
 
 class Parser {
-  private static enum Fix { PREFIX, INFIX, POSTFIX }
-  private static record Operator(Fix fix, TokenType token,
+  static enum Fix { PREFIX, INFIX, POSTFIX }
+  static record Operator(Fix fix, TokenType token,
       boolean assoc, int lowPrec, int highPrec) {}
   private static class ParseError extends RuntimeException {}
 
@@ -31,19 +31,21 @@ class Parser {
   }
 
   private Expr operatorExpression(int prec) {
-    if (prec == 16) return primary();
-
     Operator op;
     if ((op = matchOp(Fix.PREFIX, prec)) != null) {
       Token opToken = previous();
-      Expr expr = operatorExpression(op.assoc ? op.lowPrec : op.highPrec + 1);
+      Expr expr = operatorExpression(op.highPrec + 1);
+      checkPrecOverlap(op);
       return new Expr.Unary(opToken, expr);
     }
+
+    if (prec == 16) return primary();
 
     Expr expr = operatorExpression(prec + 1);
     while ((op = matchOp(Fix.INFIX, prec)) != null) {
       Token operator = previous();
       Expr right = operatorExpression(op.highPrec + 1);
+      checkPrecOverlap(op);
       expr = new Expr.Binary(expr, operator, right);
       if (!op.assoc) return expr;
     }
@@ -51,7 +53,6 @@ class Parser {
     while ((op = matchOp(Fix.POSTFIX, prec)) != null) {
       Token opToken = previous();
       expr = new Expr.Unary(opToken, expr);
-      if (!op.assoc) break;
     }
 
     return expr;
@@ -96,7 +97,7 @@ class Parser {
     throw error(peek(), "Expect expression.");
   }
 
-  private static final Operator[] operators = new Operator[] {
+  static final Operator[] operators = new Operator[] {
     new Operator(Fix.PREFIX,  NOT,        true,   4,  4 ),
     new Operator(Fix.PREFIX,  ENABLED,    false,  4,  15),
     new Operator(Fix.PREFIX,  MINUS,      true,   12, 12),
@@ -109,11 +110,23 @@ class Parser {
     new Operator(Fix.POSTFIX, PRIME,      false,  15, 15),
   };
 
+  private void checkPrecOverlap(Operator op) {
+    for (Operator next : operators) {
+      if (next.fix == Fix.PREFIX || !check(next.token)) continue;
+      if (op == next && op.assoc) continue;
+      if (op.lowPrec <= next.highPrec && next.lowPrec <= op.highPrec) {
+        throw error(peek(), "Conflicting operator precedence.");
+      }
+    }
+  }
+
   private Operator matchOp(Fix fix, int prec) {
     for (Operator op : operators) {
-      if (op.fix == fix && op.lowPrec == prec) {
-        if (match(op.token)) return op;
-      }
+      if (op.fix != fix) continue;
+      boolean eligible = op.fix == Fix.PREFIX
+          ? op.lowPrec <= prec
+          : op.lowPrec == prec;
+      if (eligible && match(op.token)) return op;
     }
 
     return null;
