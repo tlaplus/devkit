@@ -34,7 +34,8 @@ class Parser {
     Operator op;
     if ((op = matchOp(Fix.PREFIX, prec)) != null) {
       Token opToken = previous();
-      Expr expr = operatorExpression(op.assoc ? op.lowPrec : op.highPrec + 1);
+      Expr expr = operatorExpression(op.highPrec + 1);
+      checkPrecOverlap(op);
       return new Expr.Unary(opToken, expr);
     }
 
@@ -44,6 +45,7 @@ class Parser {
     while ((op = matchOp(Fix.INFIX, prec)) != null) {
       Token operator = previous();
       Expr right = operatorExpression(op.highPrec + 1);
+      checkPrecOverlap(op);
       expr = new Expr.Binary(expr, operator, right);
       if (!op.assoc) return expr;
     }
@@ -107,6 +109,16 @@ class Parser {
     new Operator(Fix.INFIX,   MINUS,      true,   11, 11),
     new Operator(Fix.POSTFIX, PRIME,      false,  15, 15),
   };
+
+  private void checkPrecOverlap(Operator op) {
+    for (Operator next : operators) {
+      if (next.fix == Fix.PREFIX || !check(next.token)) continue;
+      if (op == next && op.assoc) continue;
+      if (op.lowPrec <= next.highPrec && next.lowPrec <= op.highPrec) {
+        throw error(peek(), "Conflicting operator precedence.");
+      }
+    }
+  }
 
   private Operator matchOp(Fix fix, int prec) {
     for (Operator op : operators) {

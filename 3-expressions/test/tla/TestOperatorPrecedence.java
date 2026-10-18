@@ -84,7 +84,7 @@ public class TestOperatorPrecedence {
     };
   }
 
-  private static String getOpSymbol(Parser.Operator op) {
+  static String getOpSymbol(Parser.Operator op) {
     return switch (op.token()) {
       case NOT -> "~";
       case ENABLED -> "ENABLED";
