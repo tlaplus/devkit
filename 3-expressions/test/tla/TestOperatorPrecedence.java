@@ -120,12 +120,12 @@ public class TestOperatorPrecedence {
           || (left.lowPrec() <= right.highPrec() && right.highPrec() <= left.highPrec()); // overlap high
     }
   }
-  
+
   private static boolean isLowerPrecThan(Parser.Operator left, Parser.Operator right) {
     return left.lowPrec() < right.lowPrec()
         && left.highPrec() < right.highPrec();
   }
-  
+
   private static TokenType getHigherPrecOp(Expr expr) {
     if (expr instanceof Expr.Binary bExpr) {
       return bExpr.left instanceof Expr.Literal ? getOpToken(bExpr.right) : getOpToken(bExpr.left);
@@ -135,7 +135,7 @@ public class TestOperatorPrecedence {
       throw new RuntimeException("Invalid expression type: " + expr.getClass().descriptorString());
     }
   }
-  
+
   private static TokenType getOpToken(Expr expr) {
     if (expr instanceof Expr.Binary bExpr) {
       return bExpr.operator.type;
