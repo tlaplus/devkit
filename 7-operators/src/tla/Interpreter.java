@@ -198,7 +198,9 @@ class Interpreter implements Expr.Visitor<Object>,
       case PRIME: {
         return evaluate(expr.expr);
       } case ENABLED: {
-        return false;
+        Object operand = evaluate(expr.expr);
+        checkBooleanOperand(expr.operator, operand);
+        return (boolean)operand;
       } case NOT: {
         Object operand = evaluate(expr.expr);
         checkBooleanOperand(expr.operator, operand);

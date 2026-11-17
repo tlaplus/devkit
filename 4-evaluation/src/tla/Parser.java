@@ -8,7 +8,7 @@ import static tla.TokenType.*;
 class Parser {
   static enum Fix { PREFIX, INFIX, POSTFIX }
   static record Operator(Fix fix, TokenType token,
-      boolean assoc, int lowPrec, int highPrec) {}
+      boolean assoc, int lowPrec, int highPrec) { }
   private static class ParseError extends RuntimeException {}
 
   private final List<Token> tokens;

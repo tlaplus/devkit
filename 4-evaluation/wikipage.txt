@@ -18,7 +18,7 @@ TLA⁺ thankfully lacks ''nil'' types.
 
 Java does a huge amount of work for us with the capabilities of the ''Object'' type, as we'll see.
 
-====== Section 7.2: Representing Values ======
+====== Section 7.2: Evaluating Expressions ======
 
 [[https://craftinginterpreters.com/evaluating-expressions.html#evaluating-expressions|Section 7.2]] is where we start laying down interpreter code.
 Create a new file ''Interpreter.java'' with the highlighted lines changed or added compared with the book:
@@ -113,13 +113,14 @@ Add this code to ''visitUnaryExpr()'':
 
 We still have two more unary operators to define: ''ENABLED'', and the prime operator.
 Both are trivial in this domain but will become much more complicated later on.
-For constant expressions, ''ENABLED'' is always false and prime is just whatever the inner expression evaluates to.
+For constant expressions, ''ENABLED'' evaluates to its boolean operand and prime is just whatever the inner expression evaluates to.
 Add the highlighted code to ''visitUnaryExpr()'':
-<code java [highlight_lines_extra="2,4"]>
+<code java [highlight_lines_extra="2,4,5"]>
       case PRIME: {
         return evaluate(expr.expr);
       } case ENABLED: {
-        return false;
+        Object operand = evaluate(expr.expr);
+        return (boolean)operand;
       } case NOT: {
 </code>
 
@@ -142,10 +143,10 @@ Here's how we define our basic binary arithmetic & comparison operators; add a '
         return (int)left < (int)right;
       case EQUAL:
         return left.equals(right);
+      default:
+        // Unreachable.
+        return null;
     }
-
-    // Unreachable.
-    return null;
   }
 </code>
 
@@ -170,7 +171,7 @@ Think of it as casting the right operand to //some kind// of set, so we can acce
 It is tempting to cast it to ''Set<Object>'' (as we only ever create ''Set<Object>'' instances) but this produces a compiler warning.
 
 Similar to equality, we get looser semantics here than with TLC.
-TLC will emit a runtime error when evaluating the expression ''TRUE \in {1, 2, 3}'', while our interpreter will simple evaluate it to ''false''.
+TLC will emit a runtime error when evaluating the expression ''TRUE \in {1, 2, 3}'', while our interpreter will simply evaluate it to ''false''.
 Again this is acceptable.
 
 Now for something more complicated.
@@ -202,7 +203,7 @@ Add this ''visitTernaryExpr()'' method to the ''Interpreter'' class:
 
 <code java>
   @Override
-  public Object visitTernaryExpr(Ternary expr) {
+  public Object visitTernaryExpr(Expr.Ternary expr) {
     switch (expr.operator.type) {
       case IF:
         Object conditional = evaluate(expr.first);
@@ -251,7 +252,7 @@ Here's our variant of the ''checkNumberOperand()'' and ''checkNumberOperands()''
   }
 
   private void checkNumberOperands(Token operator,
-                                   Object left, Object right) {
+      Object left, Object right) {
     if (left instanceof Integer && right instanceof Integer) return;
 
     throw new RuntimeError(operator, "Operands must be numbers.");
@@ -259,7 +260,7 @@ Here's our variant of the ''checkNumberOperand()'' and ''checkNumberOperands()''
 </code>
 
 Create a new ''RuntimeError.java'' file.
-Contents are identical to that give in the book except for the package name:
+Contents are identical to those given in the book except for the package name:
 
 <code java [highlight_lines_extra="1"]>
 package tla;
@@ -293,13 +294,13 @@ Finally, we need a helper for checking whether an operand is a set:
 </code>
 
 Now add these checks to our interpreter code.
-Here's negative:
+Here's ''ENABLED'':
 <code java [highlight_lines_extra="3"]>
-      } case MINUS: {
+      } case ENABLED: {
         Object operand = evaluate(expr.expr);
-        checkNumberOperand(expr.operator, operand);
-        return -(int)operand;
-      } default: {
+        checkBooleanOperand(expr.operator, operand);
+        return (boolean)operand;
+      } case NOT: {
 </code>
 Logical not:
 <code java [highlight_lines_extra="3"]>
@@ -308,6 +309,14 @@ Logical not:
         checkBooleanOperand(expr.operator, operand);
         return !(boolean)operand;
       } case MINUS: {
+</code>
+Negative:
+<code java [highlight_lines_extra="3"]>
+      } case MINUS: {
+        Object operand = evaluate(expr.expr);
+        checkNumberOperand(expr.operator, operand);
+        return -(int)operand;
+      } default: {
 </code>
 Subtraction:
 <code java [highlight_lines_extra="2"]>
@@ -352,9 +361,9 @@ Finally, ''IF''/''THEN''/''ELSE'':
 
 We're very close!
 In [[https://craftinginterpreters.com/evaluating-expressions.html#hooking-up-the-interpreter|section 7.4]] we put in the finishing touches to get to a real running TLA⁺ REPL!
-First, add this public ''interpret()'' method to the ''Interpreter'' class; highlighted line shows a difference from the book:
+First, add this ''interpret()'' method to the ''Interpreter'' class; highlighted line shows a difference from the book:
 <code java [highlight_lines_extra="6"]>
-  void interpret(Expr expression) { 
+  void interpret(Expr expression) {
     try {
       Object value = evaluate(expression);
       System.out.println(stringify(value));
@@ -412,10 +421,11 @@ public class TlaPlus {
 
 Then finish it off by actually interpreting the expression given by the user; add this in the ''run()'' method in the ''TlaPlus'' class:
 
-<code java [highlight_lines_extra="4"]>
+<code java [highlight_lines_extra="5"]>
     // Stop if there was a syntax error.
     if (hadError) return;
 
+    System.out.println(new AstPrinter().print(expression));
     interpreter.interpret(expression);
   }
 </code>
@@ -425,6 +435,8 @@ Your program will now interpret any constant TLA⁺ expression you provide it!
 Try it out:
 <code>
 > {0 .. 2, IF TRUE THEN 1 ELSE 2, {}}
+(some output skipped)
+({ (.. 0 2) (IF true 1 2) ({))
 [[], 1, [0, 1, 2]]
 </code>
 
