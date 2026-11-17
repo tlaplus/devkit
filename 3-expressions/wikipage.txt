@@ -241,13 +241,13 @@ We also have some modifications and additions to the ''visit'' methods of the ''
   }
 
   @Override
-  public string visitTernaryExpr(Expr.Ternary expr) {
+  public String visitTernaryExpr(Expr.Ternary expr) {
     return parenthesize(expr.operator.lexeme, expr.first,
                         expr.second, expr.third);
   }
 
   @Override
-  public string visitVariadicExpr(Expr.Variadic expr) {
+  public String visitVariadicExpr(Expr.Variadic expr) {
     return parenthesize(expr.operator.lexeme,
                         expr.parameters.toArray(Expr[]::new));
   }
@@ -402,22 +402,22 @@ Put it at the top of the ''Parser'' class:
 
 <code java [highlight_lines_extra="2,3,4"]>
 class Parser {
-  private static enum Fix { PREFIX, INFIX, POSTFIX }
-  private static record Operator(Fix fix, TokenType token,
-      boolean assoc, int lowPrec, int highPrec) {}
+  static enum Fix { PREFIX, INFIX, POSTFIX }
+  static record Operator(Fix fix, TokenType token,
+      boolean assoc, int lowPrec, int highPrec) { }
 
   private final List<Token> tokens;
 </code>
 
-You can find operator attributes on page 271 of //[[https://lamport.azurewebsites.net/tla/book.html|Specifying Systems]]// by Leslie Lamport, or [[https://github.com/tlaplus/tlaplus/blob/13e5a39b5368a6da4906b8ed1c2c1114d2e7de15/tlatools/org.lamport.tlatools/src/tla2sany/parser/Operators.java#L130-L234|this TLA⁺ tools source file]].
+You can find operator attributes on page 271 of //[[https://lamport.azurewebsites.net/tla/book.html|Specifying Systems]]// by Leslie Lamport, or [[https://github.com/tlaplus/tlaplus/blob/417491ec7e1839191744eb10ccd3e4ee11035e95/tlatools/org.lamport.tlatools/src/tla2sany/parser/Operators.java#L130-L234|this TLA⁺ tools source file]].
 We use a small subset of these operators.
-Record their attributes in a table in ''Parser.java'', below ''operatorExpression()'':
+Record their attributes in a table in ''Parser.java'', below ''operatorExpression()''; note associativity is only meaningful for infix operators, so we'll set it to ''false'' for everything else:
 
 <code java>
-  private static final Operator[] operators = new Operator[] {
-    new Operator(Fix.PREFIX,  NOT,        true,   4,  4 ),
+  static final Operator[] operators = new Operator[] {
+    new Operator(Fix.PREFIX,  NOT,        false,  4,  4 ),
     new Operator(Fix.PREFIX,  ENABLED,    false,  4,  15),
-    new Operator(Fix.PREFIX,  MINUS,      true,   12, 12),
+    new Operator(Fix.PREFIX,  MINUS,      false,  12, 12),
     new Operator(Fix.INFIX,   IN,         false,  5,  5 ),
     new Operator(Fix.INFIX,   EQUAL,      false,  5,  5 ),
     new Operator(Fix.INFIX,   LESS_THAN,  false,  5,  5 ),
@@ -453,11 +453,11 @@ Add this code above ''match()'':
 Okay, we're all set for the main event!
 Here is how we modify ''operatorExpression()'' to parse infix operators.
 You can see a strong resemblance to the infix operator parsing code given in the book (new lines highlighted):
-<code java [highlight_lines_extra="4,7,8,9,10,11"]>
+<code java [highlight_lines_extra="2,7,8,9,10,11"]>
   private Expr operatorExpression(int prec) {
-    if (prec == 16) return primary();
-
     Operator op;
+
+    if (prec == 16) return primary();
 
     Expr expr = operatorExpression(prec + 1);
     while ((op = matchOp(Fix.INFIX, prec)) != null) {
@@ -472,9 +472,6 @@ You can see a strong resemblance to the infix operator parsing code given in the
 
 We use Java's combined conditional-assignment atop the ''while'' loop to make our code more terse, both checking whether any operators were matched and getting details of the matched operator if so.
 The interior of the ''while'' loop is largely identical to infix parsing logic from the book, except for when we recurse to a higher precedence level: in the book the code recurses one level above the matched operator's precedence, but here we go one level above the //upper bound// of the matched operator's precedence.
-It takes a bit of thinking to understand why this works for parsing expressions according to the precedence rules we want, but it does.
-Take a minute to ponder it.
-If you still don't get it, wait until we have a fully-functional expression parser then play around with this line to see how it changes the behavior.
 
 Our code implements precedence ranges, but assumes all infix operators are associative.
 We need to modify the loop to return immediately if the infix operator is not associative:
@@ -488,50 +485,56 @@ We need to modify the loop to return immediately if the infix operator is not as
 </code>
 
 And that's how we parse infix operators!
-That was the most complicated case, so let's move on to prefix operators.
-Again our code resembles the prefix operator parsing logic given in the book.
-Add this snippet near the top of ''operatorExpression()'':
-
-<code java [highlight_lines_extra="5,6,7,8,9,10"]>
-  private Expr operatorExpression(int prec) {
-    if (prec == 16) return primary();
-
-    Operator op;
-    if ((op = matchOp(Fix.PREFIX, prec)) != null) {
-      Token opToken = previous();
-      Expr expr = operatorExpression(
-                    op.assoc ? op.lowPrec : op.highPrec + 1);
-      return new Expr.Unary(opToken, expr);
-    }
-
-    Expr expr = operatorExpression(prec + 1);
-</code>
-
-Of note is the expression ''op.assoc ? op.lowPrec : op.highPrec + 1'' controlling the precedence level at which we recurse.
-To understand this expression, it is helpful to consider an example.
-The negative prefix operator ''-1'' is associative, so we should be able to parse the expression ''--1'' as ''-(-1)''.
-In order to do that after consuming the first ''-'' we have to recurse into ''operatorExpression()'' //at the same precedence level//.
-Then we will consume the second ''-'', then again recurse and ultimately consume ''1'' in our yet-to-be-defined ''primary'' method.
-In contrast, the prefix operator ''ENABLED'' is not associative and has range 4-15.
-In that case we want to reject the expression ''ENABLED ENABLED TRUE'', so we recurse at a level higher than ''ENABLED'''s upper precedence bound.
-Thus the second ''ENABLED'' will not be matched and we will report a parse error using methods defined in chapter section 6.3.
-
-All that remains is to parse postfix operators.
+Next up is postfix operators.
 These are not covered in the book, but they pretty much resemble infix operators without matching an expression on the right-hand side of the operator.
 Add the highlighted code below the ''INFIX'' logic in ''operatorExpression()'':
 
-<code java [highlight_lines_extra="3,4,5,6,7"]>
+<code java [highlight_lines_extra="3,4,5,6"]>
     }
 
     while ((op = matchOp(Fix.POSTFIX, prec)) != null) {
       Token opToken = previous();
       expr = new Expr.Unary(opToken, expr);
-      if (!op.assoc) break;
     }
 
-    return expr
+    return expr;
   }
 </code>
+
+Easy enough.
+Now the surprisingly tricky prefix operator case.
+Again our code resembles the prefix operator parsing logic given in the book.
+Add this snippet near the top of ''operatorExpression()''; it requires a new matching helper, ''matchPrefixOp()'':
+<code java [highlight_lines_extra="3,4,5,6,7"]>
+  private Expr operatorExpression(int prec) {
+    Operator op;
+    if ((op = matchPrefixOp(prec)) != null) {
+      Token opToken = previous();
+      Expr expr = operatorExpression(op.highPrec + 1);
+      return new Expr.Unary(opToken, expr);
+    }
+
+    if (prec == 16) return primary();
+</code>
+
+I wish we could re-use ''matchOp()'', but prefix operators are more finicky than that.
+The difficulty arises when parsing an expression like ''--1'': the negative prefix operator has range 12-12, but after the first negative operator we recurse with ''operatorExpression(op.highPrec + 1)'', which evaluates to ''operatorExpression(13)''.
+Calling ''matchOp(Fix.PREFIX, 13)'' would not successfully match the second negative operator.
+It turns out we need to match prefix operators when they are equal to **or less than** the current precedence, instead of only when equal to the current precedence.
+So, add another helper:
+<code java>
+  private Operator matchPrefixOp(int prec) {
+    for (Operator op : operators) {
+      if (op.fix == Fix.PREFIX && op.lowPrec <= prec) {
+        if (match(op.token)) return op;
+      }
+    }
+
+    return null;
+  }
+</code>
+
+You might be tempted to just ignore precedence entirely for prefix operators, but then we would match the operator "too early" in the recursive descent; to see where this goes awry, try removing ''op.lowPrec <= prec'' from ''matchPrefixOp()'' and trace how that would parse the expression ''-1 + 2''.
 
 And that completes our operator parsing logic!
 All that remains is our ''primary()'' method.
@@ -616,7 +619,7 @@ Then add the ''error()'' method after ''previous()'':
 
 <code java>
   private ParseError error(Token token, String message) {
-    Lox.error(token, message);
+    TlaPlus.error(token, message);
     return new ParseError();
   }
 </code>
@@ -637,9 +640,9 @@ Add the ''ParseError'' class definition at the top of the ''Parser'' class:
 
 <code java [highlight_lines_extra="5"]>
 class Parser {
-  private static enum Fix { PREFIX, INFIX, POSTFIX }
-  private static record Operator(Fix fix, TokenType token,
-      boolean assoc, int lowPrec, int highPrec) {}
+  static enum Fix { PREFIX, INFIX, POSTFIX }
+  static record Operator(Fix fix, TokenType token,
+      boolean assoc, int lowPrec, int highPrec) { }
   private static class ParseError extends RuntimeException {}
 
   private final List<Token> tokens;
@@ -664,11 +667,70 @@ Fully-featured TLA⁺ parsers generally look ahead to identify the start of a ne
 For an example, see SANY's very complicated ''[[https://github.com/tlaplus/tlaplus/blob/13e5a39b5368a6da4906b8ed1c2c1114d2e7de15/tlatools/org.lamport.tlatools/javacc/tla%2B.jj#L229-L392|belchDEF()]]'' method.
 We won't be doing that here, but it's a good technique to know about; looking ahead then inserting synthetic tokens to disambiguate syntax is a common method when parsing complicated & ambiguous languages like TLA⁺.
 
+One additional TLA⁺-specific modification here is a helper to check for overlapping operator precedence.
+Expressions like ''%%ENABLED TRUE'%%'' should produce an error, as ''ENABLED'' has precedence 4-15 and the prime operator has precedence 15-15 - a conflict.
+Add the helper:
+<code java>
+  private void checkPrecOverlap(Operator op) {
+    for (Operator next : operators) {
+      if (next.fix == Fix.PREFIX || !check(next.token)) continue;
+      if (op == next && op.assoc) continue;
+      if (op.lowPrec <= next.highPrec && next.lowPrec <= op.highPrec) {
+        throw error(peek(), "Conflicting operator precedence.");
+      }
+    }
+  }
+</code>
+
+Then add calls to this helper in ''operatorExpression()'':
+
+<code java [highlight_lines_extra="6,16"]>
+  private Expr operatorExpression(int prec) {
+    Operator op;
+    if ((op = matchPrefixOp(prec)) != null) {
+      Token opToken = previous();
+      Expr expr = operatorExpression(op.highPrec + 1);
+      checkPrecOverlap(op);
+      return new Expr.Unary(opToken, expr);
+    }
+
+    if (prec == 16) return primary();
+
+    Expr expr = operatorExpression(prec + 1);
+    while ((op = matchOp(Fix.INFIX, prec)) != null) {
+      Token operator = previous();
+      Expr right = operatorExpression(op.highPrec + 1);
+      checkPrecOverlap(op);
+      expr = new Expr.Binary(expr, operator, right);
+      if (!op.assoc) return expr;
+    }
+</code>
+
 ===== Section 6.4: Wiring up the Parser =====
 
 In [[https://craftinginterpreters.com/parsing-expressions.html#wiring-up-the-parser|section 6.4]] we finally arrive at the point where you can parse TLA⁺ expressions in your REPL.
-In the ''run()'' method of the ''TlaPlus'' class, delete the code printing out the scanned tokens (or not, it can be informative to keep around) and replace it with this:
+As in the book, add error reporting to the end of the ''primary()'' method in the ''Parser'' class:
 
+<code java [highlight_lines_extra="4"]>
+      return new Expr.Variadic(operator, elements);
+    }
+
+    throw error(peek(), "Expect expression.");
+  }
+</code>
+
+Also add a new ''parse()'' method to the ''Parser'' class:
+<code java>
+  Expr parse() {
+    try {
+      return expression();
+    } catch (ParseError error) {
+      return null;
+    }
+  }
+</code>
+
+In the ''run()'' method of the ''TlaPlus'' class, delete the code printing out the scanned tokens (or not, it can be informative to keep around) and replace it with this:
 <code java [highlight_lines_extra="3,4,6,7,9"]>
     List<Token> tokens = scanner.scanTokens();
 

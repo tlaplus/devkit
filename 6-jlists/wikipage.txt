@@ -91,9 +91,9 @@ We skipped defining them in the expressions chapter where we learned how to pars
 
 <code java [highlight_lines_extra="5,6"]>
 private static final Operator[] operators = new Operator[] {
-    new Operator(Fix.PREFIX,  NOT,        true,   4,  4 ),
+    new Operator(Fix.PREFIX,  NOT,        false,  4,  4 ),
     new Operator(Fix.PREFIX,  ENABLED,    false,  4,  15),
-    new Operator(Fix.PREFIX,  MINUS,      true,   12, 12),
+    new Operator(Fix.PREFIX,  MINUS,      false,  12, 12),
     new Operator(Fix.INFIX,   AND,        true,   3,  3 ),
     new Operator(Fix.INFIX,   OR,         true,   3,  3 ),
     new Operator(Fix.INFIX,   IN,         false,  5,  5 ),

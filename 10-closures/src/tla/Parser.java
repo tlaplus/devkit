@@ -85,7 +85,7 @@ class Parser {
 
   private Expr operatorExpression(int prec) {
     Operator op;
-    if ((op = matchOp(Fix.PREFIX, prec)) != null) {
+    if ((op = matchPrefixOp(prec)) != null) {
       Token opToken = previous();
       Expr expr = operatorExpression(op.highPrec + 1);
       checkPrecOverlap(op);
@@ -210,9 +210,9 @@ class Parser {
   }
 
   static final Operator[] operators = new Operator[] {
-    new Operator(Fix.PREFIX,  NOT,        true,   4,  4 ),
+    new Operator(Fix.PREFIX,  NOT,        false,  4,  4 ),
     new Operator(Fix.PREFIX,  ENABLED,    false,  4,  15),
-    new Operator(Fix.PREFIX,  MINUS,      true,   12, 12),
+    new Operator(Fix.PREFIX,  MINUS,      false,  12, 12),
     new Operator(Fix.INFIX,   AND,        true,   3,  3 ),
     new Operator(Fix.INFIX,   OR,         true,   3,  3 ),
     new Operator(Fix.INFIX,   IN,         false,  5,  5 ),
@@ -285,13 +285,21 @@ class Parser {
     }
   }
 
+  private Operator matchPrefixOp(int prec) {
+    for (Operator op : operators) {
+      if (op.fix == Fix.PREFIX && op.lowPrec <= prec) {
+        if (match(op.token)) return op;
+      }
+    }
+
+    return null;
+  }
+
   private Operator matchOp(Fix fix, int prec) {
     for (Operator op : operators) {
-      if (op.fix != fix) continue;
-      boolean eligible = op.fix == Fix.PREFIX
-          ? op.lowPrec <= prec
-          : op.lowPrec == prec;
-      if (eligible && match(op.token)) return op;
+      if (op.fix == fix && op.lowPrec == prec) {
+        if (match(op.token)) return op;
+      }
     }
 
     return null;
