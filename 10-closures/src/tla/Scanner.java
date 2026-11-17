@@ -94,7 +94,6 @@ class Scanner {
         } else {
           TlaPlus.error(line, "Unexpected character.");
         }
-        break;
     }
   }
 

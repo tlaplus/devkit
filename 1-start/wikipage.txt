@@ -41,7 +41,7 @@ There are two good reasons for this:
   - The high-quality free online textbook //[[https://craftinginterpreters.com/contents.html|Crafting Interpreters]]// by Robert Nystrom uses Java, and this tutorial is largely a TLA⁺-themed wrapper around its concepts. That book states its own reasons for using Java, which you can read.
 
 You will need to install the [[https://adoptium.net/|Java Development Kit]] appropriate for your system.
-This tutorial requires Java 21 or higher, for the Java 17 [[https://openjdk.org/jeps/395|records]] feature, ''[[https://docs.oracle.com/en/java/javase/17/language/pattern-matching-instanceof.html|instanceof]]'' pattern-matching, and the Java 21 ''[[https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/SequencedCollection.html#reversed()|reversed()]]'' method.
+This tutorial requires Java 21 or higher, for the Java 16 [[https://openjdk.org/jeps/395|records]] feature, ''[[https://docs.oracle.com/en/java/javase/17/language/pattern-matching-instanceof.html|instanceof]]'' pattern-matching, and the Java 21 ''[[https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/SequencedCollection.html#reversed()|reversed()]]'' method.
 While all code artifacts can be produced entirely by reading this tutorial, if you get out of sync you can find working implementations in [[https://github.com/tlaplus/devkit|this git repository]].
 
 The tutorial has you construct the TLA⁺ tools from the bottom up.
@@ -87,7 +87,7 @@ Read part I (the first three chapters) of free online textbook //[[https://craft
 We will be closely following the material in this book, modifying it to our uses.
 The first two chapters are a nice introduction and overview of language implementation generally.
 Chapter three specifies a toy language called Lox, to be used as an object of study for the remainder of the book.
-Our minimal TLA⁺ subset has some similarity to Lox with regard to expressions involving integers and booleans, but also differences - you can skip the section on closures (unless you want to implement higher-order operator parameters yourself) and the section on classes.
+Our minimal TLA⁺ subset has some similarity to Lox with regard to expressions involving integers and booleans, but also many differences - especially in their ultimate execution model.
 What's important is that it's similar enough for all the fundamentals to still apply!
 
 Code snippets are shown often in this tutorial.
@@ -109,7 +109,7 @@ For example:
         break;
 </code>
 
-Sometimes the code given here is so different from that provided by the book that highlighting is simply ommitted to reduce visual noise.
+Sometimes the code given here is so different from that provided by the book that highlighting is simply omitted to reduce visual noise.
 A parenthetical will specify the meaning of highlighted code when ambiguous.
 
 To begin the tutorial, start at page [[creating:scanning|Scanning TLA⁺ Tokens]].
