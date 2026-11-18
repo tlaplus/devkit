@@ -1,11 +1,11 @@
 ======= Handling TLA⁺ Statements =======
 
-Here we cover [[https://craftinginterpreters.com/statements-and-state.html|Chapter 8: Statements and State]] of book //Crafting Interpreters//.
+Here we cover [[https://craftinginterpreters.com/statements-and-state.html|Chapter 8: Statements and State]] of the book //Crafting Interpreters//.
 We'll implement the ability to associate identifiers with values, then subsequently use those identifiers in expressions.
 While Lox was designed with a dual REPL/file execution model in mind, TLA⁺ was not - so the behavior of our interpreter will vary quite a bit from the book!
 We'll have to implement parser & interpreter //modes//.
 When the user runs our TLA⁺ interpreter as a REPL, we want to support operator redefinition and the ability to see the value of simple expressions - like the Python REPL.
-In contast, when the user runs our TLA⁺ interpreter against a file it should be an error for multiple operators to use the same name.
+In contrast, when the user runs our TLA⁺ interpreter against a file it should be an error for multiple operators to use the same name.
 The parser also should not accept standalone expressions in the middle of the file.
 
 ====== Section 8.1: Statements ======
@@ -45,7 +45,7 @@ We then need to extend our ''Parser'' constructor to accept a parameter telling 
   }
 </code>
 
-Modify ''parse()'' in the ''Parser'' class, same as in the book:
+Entirely replace ''parse()'' in the ''Parser'' class, same as in the book:
 
 <code java>
   List<Stmt> parse() {
@@ -59,8 +59,8 @@ Modify ''parse()'' in the ''Parser'' class, same as in the book:
 </code>
 
 Our ''statement()'' method is different from the book; if we're in REPL mode we parse & return a statement wrapped in a ''Stmt.Print'' object, and error otherwise.
+In other words, we automatically promote naked expressions into print statements.
 Use ''peek()'' to get the first token in the expression for error location reporting.
-We'll return to this method later to add parsing logic for operator definitions.
 <code java>
   private Stmt statement() {
     if (replMode) return new Stmt.Print(peek(), expression());
@@ -71,7 +71,7 @@ We'll return to this method later to add parsing logic for operator definitions.
 
 ===== Executing statements =====
 
-Add ''Stmt'' to the list of interfaces implemented by the ''Interpreter'' class:
+Add the ''Stmt'' visitor to the list of interfaces implemented by the ''Interpreter'' class:
 <code java [highlight_lines_extra="2"]>
 class Interpreter implements Expr.Visitor<Object>,
                              Stmt.Visitor<Void> {
@@ -89,8 +89,8 @@ This is identical to the book:
   }
 </code>
 
-Same as the book, modify the old ''interpret()'' method to accept a list of statements.
-The changed method is identical to the book except for using ''TlaPlus'' instead of ''Lox'':
+Same as the book, overwrite the old ''interpret()'' method to accept a list of statements.
+The new method is identical to the book except for using ''TlaPlus'' instead of ''Lox'':
 <code java [highlight_lines_extra="7"]>
   void interpret(List<Stmt> statements) {
     try {
@@ -135,17 +135,18 @@ Parameterize the ''run()'' method with a ''replMode'' argument, propagate it to 
     // Stop if there was a syntax error.
 </code>
 
-Still in ''run()'', replace the call to the interpreter with this:
-<code java [highlight_lines_extra="3"]>
+Still in ''run()'', replace the call to the printer & interpreter with this:
+<code java [highlight_lines_extra="3,4"]>
     if (hadError) return;
 
+    System.out.println(new AstPrinter().print(statements));
     interpreter.interpret(statements);
   }
 </code>
 
 A bit more tidying up is necessary.
 We need to detect when we're in REPL vs. file mode and propagate that information to our various methods and classes.
-Remove the ''final'' annotation on the ''interpreter'' field of the ''TlaPlus'' class and leave it uninitialized by default:
+Remove the ''final'' modifier on the ''interpreter'' field of the ''TlaPlus'' class and leave it uninitialized by default:
 
 <code java [highlight_lines_extra="2"]>
 public class TlaPlus {
@@ -181,7 +182,7 @@ Similarly modify the ''runPrompt'' method:
 
 We just used an ''Interpreter'' constructor accepting a parameter indicating whether we're operating in REPL mode.
 Write that constructor now, although don't yet do anything with the parameter:
-<code Java>
+<code java>
   public Interpreter(boolean replMode) {
 
   }
@@ -193,7 +194,7 @@ This was a lot of work to make our REPL basically function as it did before - pr
 
 In [[https://craftinginterpreters.com/statements-and-state.html#global-variables|section 8.2]] we introduce global variables in the sense of top-level operator definitions.
 Operator definitions in TLA⁺ take the form ''name == expr''.
-They can be parameterized with arguments, but we won't be implementing that until the tutorial covering chapter 10.
+They can be parameterized with arguments, but we won't be implementing that until the tutorial covering chapter 10 of //Crafting Interpreters//.
 For now we are simply assigning a name to a value.
 
 Start off by generating a new class ''Stmt.OpDef'' by adding to the ''main()'' method of your ''GenerateAst'' class:
@@ -205,7 +206,7 @@ Start off by generating a new class ''Stmt.OpDef'' by adding to the ''main()'' m
     ));
 </code>
 
-Also generate a ''Expr.Variable'' class for expressions referring to the operators:
+Also generate an ''Expr.Variable'' class for expressions referring to the operators:
 
 <code java [highlight_lines_extra="5"]>
     defineAst(outputDir, "Expr", Arrays.asList(
@@ -246,7 +247,7 @@ The ''declaration()'' method is defined similarly to the book, with one line dif
 
 That single line difference calls three separate functions we still need to define.
 While Lox is a nice unambiguous language with semicolon-delimited statements, TLA⁺ is a wholly different beast!
-In TLA⁺ it is quite difficult to know where each definition ends and another beings.
+In TLA⁺ it is quite difficult to know where each definition ends and another begins.
 We have to resort to the somewhat drastic measure of cloning our parser then looking several tokens ahead in the stream in search of a ''=='', at which point we will know for certain we are about to parse a new definition.
 This type of unbounded lookahead is inelegant and can lead to poor parser performance, but it simply has to be done.
 Here's our ''lookahead()'' method, which returns a cloned parser instance; put it above ''match()'':
@@ -280,7 +281,7 @@ Finally, here's the ''operatorDefinition()'' method; again put it below ''declar
   }
 </code>
 
-So we clone the parser, used the cloned parser to look ahead to see whether we're at the start of an operator definition, and - if so - throw away the cloned parser then use our original parser to parse the operator definition like normal.
+So we clone the parser, use the cloned parser to look ahead to see whether we're at the start of an operator definition, and - if so - throw away the cloned parser then use our original parser to parse the operator definition like normal.
 
 Incidentally, we can now fill out our ''synchronize()'' error recovery method!
 We want ''synchronize()'' to return when it is about to parse another declaration.
@@ -318,7 +319,7 @@ Add this logic to the ''primary()'' method of the ''Parser'' class:
 ====== Section 8.3: Environments ======
 
 In [[https://craftinginterpreters.com/statements-and-state.html#environments|section 8.3]] we build the infrastructure for assigning values to variables then retrieving them.
-Create a new file, ''Environment.java'':
+Create a new file, ''Environment.java'' (changes relative to book highlighted):
 
 <code java [highlight_lines_extra="1"]>
 package tla;
@@ -335,7 +336,7 @@ We need to make an additional modification here, adding a parameter indicating w
 We only want to allow variable redefinition inside a REPL, and disallow it otherwise.
 This requires defining a constructor:
 
-<code java [highlight_lines_extra=""]>
+<code java [highlight_lines_extra="2,5,6,7"]>
 class Environment {
   private final boolean allowRedefinition;
   private final Map<String, Object> values = new HashMap<>();
@@ -346,7 +347,7 @@ class Environment {
 }
 </code>
 
-Then, our ''define()'' method looks like this:
+Then, our ''define()'' method looks like this (changes relative to book highlighted):
 
 <code java [highlight_lines_extra="1,2,3,4"]>
   void define(Token name, Object value) {
@@ -358,7 +359,7 @@ Then, our ''define()'' method looks like this:
   }
 </code>
 
-Note that we changed the method signature to accept a ''Token'' instead of a ''String'' for the name, so that the ''RuntimeError'' can be constructed properly.
+Compared to the book we changed the method signature to accept a ''Token'' instead of a ''String'' for the name, so that the ''RuntimeError'' can be constructed properly.
 
 Our ''get()'' method is unchanged from the book:
 
@@ -407,8 +408,7 @@ Add a visitor method in the ''Interpreter'' class for the ''Stmt.OpDef'' class:
 </code>
 
 And that's it!
-Your interpreter should now support definitions:
-
+Your interpreter should now support definitions (some output omitted below):
 <code>
 > x == 2
 > y == 3
@@ -429,8 +429,7 @@ class Environment {
   private final Map<String, Object> values = new HashMap<>();
 </code>
 
-Initialize it to ''null'' in the current constructor, then add a copy constructor:
-
+Initialize it to ''null'' in the current constructor, then add a second constructor:
 <code java [highlight_lines_extra="2,6,7,8,9"]>
   Environment(boolean allowRedefinition) {
     enclosing = null;
@@ -443,12 +442,26 @@ Initialize it to ''null'' in the current constructor, then add a copy constructo
   }
 </code>
 
+Finally, update ''get()'':
+<code java [highlight_lines_extra="6"]>
+  Object get(Token name) {
+    if (values.containsKey(name.lexeme)) {
+      return values.get(name.lexeme);
+    }
+
+    if (enclosing != null) return enclosing.get(name);
+
+    throw new RuntimeError(name,
+        "Undefined variable '" + name.lexeme + "'.");
+  }
+</code>
+
 No further changes to ''Environment'' are necessary at this time; we'll define the desired semantics in later chapters.
 
 Next up, our greatest parsing challenge yet: [[creating:jlists|conjunction & disjunction lists]]!
 If your code got out of sync during this tutorial, you can find a snapshot of its expected state in [[https://github.com/tlaplus/devkit/tree/main/5-statements|this repo directory]].
 
-====== Section 8.5: Challenges ======
+====== Challenges ======
 
   - Write some unit tests for your interpreter. Capture the ''System.out'' output; use the ''[[https://docs.oracle.com/javase/8/docs/api/java/lang/System.html#setOut-java.io.PrintStream-|System.setOut()]]'' method with a ''[[https://docs.oracle.com/javase/8/docs/api/java/io/PrintStream.html|PrintStream]]'' instance constructed using a ''[[https://docs.oracle.com/javase/8/docs/api/java/io/ByteArrayOutputStream.html|ByteArrayOutputStream]]''.
   - The ''isAtOpDefStart()'' and ''operatorDefinition()'' methods have some duplicated logic that will only grow more involved when we add operator parameter support. Can you find a way to factor out this logic into a single method?

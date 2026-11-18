@@ -35,7 +35,7 @@ public class TlaPlus {
   }
 
   private static void runPrompt() throws IOException {
-    interpreter = new Interpreter(false);
+    interpreter = new Interpreter(true);
     InputStreamReader input = new InputStreamReader(System.in);
     BufferedReader reader = new BufferedReader(input);
 
