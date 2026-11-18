@@ -2,7 +2,7 @@
 
 [[https://craftinginterpreters.com/control-flow.html|Chapter 9]] of //Crafting Interpreters// covers control flow - ''if'', ''while'', ''for'', and all that.
 TLA⁺ doesn't really have that, because TLA⁺ specifications aren't imperative programs.
-However, TLA⁺ //does// have something similar.
+However, TLA⁺ //does// have something somewhat analogous.
 When specifying a system's actions, we commonly need to do two things: write preconditions or "guards" controlling whether an action can be taken, and specify the set of possible next-state transitions.
 For the former we use conjunction (aka logical "and"), and for the latter we use disjunction (aka logical "or").
 These operators are so ubiquitous in TLA⁺ that a special syntax was developed to ease their use: vertically-aligned conjunction & disjunction lists, henceforth called "jlists" for brevity.
@@ -63,7 +63,7 @@ Now we put it to use in a new helper function for the ''Parser'' class, ''matchB
 </code>
 
 ''matchBullet()'' consumes a ''/\'' or ''\/'' token only if it is of the expected type and column.
-In this way our jlist parsing logic will only add another expression if it finds another vertically-aligned ''/\'' or ''\/'' token on the next line.
+In this way our jlist parsing logic will only add another expression if it finds another vertically-aligned ''/\'' or ''\/'' token on a subsequent line.
 This all... kind of works?
 You can parse a surprisingly broad set of jlists with just our simple logic!
 Try it out; here are some jlists that can now be parsed:
@@ -87,10 +87,10 @@ Make them as nested and wild as you like, our code will handle them!
 So are we done?
 Unfortunately not.
 Here's the proverbial wrench: TLA⁺ also allows ''\/'' and ''/\'' as //infix operators//.
-We skipped defining them in the expressions chapter where we learned how to parse operators of different precedences; let's add them to ''operators'' table in our ''Token'' class now:
+We skipped defining them in the expressions chapter where we learned how to parse operators of different precedences; let's add them to the ''operators'' table in our ''Parser'' class now:
 
 <code java [highlight_lines_extra="5,6"]>
-private static final Operator[] operators = new Operator[] {
+  static final Operator[] operators = new Operator[] {
     new Operator(Fix.PREFIX,  NOT,        false,  4,  4 ),
     new Operator(Fix.PREFIX,  ENABLED,    false,  4,  15),
     new Operator(Fix.PREFIX,  MINUS,      false,  12, 12),
@@ -125,9 +125,9 @@ However, if we want to parse jlists correctly we will need to break this limitat
 
 What does this change mean in practical terms?
 First, it means we cannot easily write the formal TLA⁺ grammar in Backus-Naur Form (BNF) as we learned to do in [[https://craftinginterpreters.com/representing-code.html|Chapter 5: Representing Code]].
-Although grammar notation [[https://en.wikipedia.org/wiki/Context-sensitive_grammar|does exist]] for context-sensitive languages, it is unintuitive and more of a hindrance to langage implementers than a help.
+Although grammar notation [[https://en.wikipedia.org/wiki/Context-sensitive_grammar|does exist]] for context-sensitive languages, it is unintuitive and more of a hindrance to language implementers than a help.
 Thus formal TLA⁺ grammars exclude jlists and use BNF to define the non-jlist parts of the language, then use plain language to describe how jlists work.
-Second - returning to our parser implementation here - it means that our ''Parser'' class carries some additional mutable state in a class variable, and its methods change their behavior based on that state.
+Second - returning to our parser implementation here - it means that our ''Parser'' class carries some additional mutable state in an instance field, and its methods change their behavior based on that state.
 
 Ultimately the shape of this state is a stack of nested jlists.
 Each entry in the stack records the column of a jlist's vertical alignment.
@@ -137,7 +137,7 @@ The top of this stack is the "current" jlist context, and it modifies how ''chec
 
 We'll be using Java's ''[[https://docs.oracle.com/javase/8/docs/api/java/util/ArrayDeque.html|ArrayDeque]]'' class as a stack.
 It only needs to hold the jlist column.
-Define a new class variable near the top of the ''Parser'' class:
+Define a new instance field near the top of the ''Parser'' class:
 <code java [highlight_lines_extra="4"]>
   private final List<Token> tokens;
   private int current = 0;
@@ -183,12 +183,13 @@ Then add this critical line to the ''check()'' helper, to always return false if
 
 This works!
 We can parse jlists again!
-It's a bit tricky to figure out how this changes things in practice, so let's take a close look at our infix operator parsing code in ''operatorExpression()'':
+It's a bit tricky to figure out how this changes things in practice, so let's take a close look at our infix operator parsing code in ''operatorExpression()'', presented below without change:
 <code java>
     Expr expr = operatorExpression(prec + 1);
     while ((op = matchOp(Fix.INFIX, prec)) != null) {
       Token operator = previous();
       Expr right = operatorExpression(op.highPrec + 1);
+      checkPrecOverlap(op);
       expr = new Expr.Binary(expr, operator, right);
       if (!op.assoc) return expr;
     }
@@ -268,7 +269,7 @@ Add conjunction list evaluation logic to ''visitVariadicExpr()'' in the ''Interp
         return true;
       default:
         // Unreachable.
-        return null
+        return null;
 </code>
 
 Then add the disjunction list logic right below that:
@@ -294,11 +295,12 @@ So, we'll perform a trick which also has its parallel in chapter 9 of the book: 
 We will flatten infix ''/\'' and ''\/'' operators so they actually form a jlist.
 
 In the ''Parser'' class, modify the infix operator parsing loop in ''operatorExpression()'' by replacing the ''expr ='' line with a call to a new helper, ''flattenInfix()'':
-<code java [highlight_lines_extra="5"]>
+<code java [highlight_lines_extra="6"]>
     Expr expr = operatorExpression(prec + 1);
     while ((op = matchOp(Fix.INFIX, prec)) != null) {
       Token operator = previous();
       Expr right = operatorExpression(op.highPrec + 1);
+      checkPrecOverlap(op);
       expr = flattenInfix(expr, operator, right);
       if (!op.assoc) return expr;
     }
