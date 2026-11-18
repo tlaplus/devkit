@@ -34,7 +34,7 @@ public class TestActionEvaluation {
       Interpreter i = new Interpreter(true);
       i.interpret(parse(input));
       Stmt.Print action = parseAction(actionInput);
-      return i.getNextStates(action.location, action.expression);
+      return i.getNextStates(action.location, action.expression, false);
     }
   }
 
@@ -162,8 +162,8 @@ public class TestActionEvaluation {
       for (Map<String, Object> state : states) {
         List<Map<String, Object>> nextStates =
             isInitialState
-            ? i.getNextStates(init.location, init.expression)
-            : i.getNextStates(next.location, next.expression);
+            ? i.getNextStates(init.location, init.expression, false)
+            : i.getNextStates(next.location, next.expression, false);
         assertTrue(nextStates.contains(state), state.toString() + " not in " + nextStates.toString());
         i.goToState(state);
         isInitialState = false;
@@ -293,7 +293,7 @@ public class TestActionEvaluation {
 
       for (String actionName : actions) {
         Stmt.Print action = parseAction(actionName);
-        List<Map<String, Object>> nextStates = i.getNextStates(action.location, action.expression);
+        List<Map<String, Object>> nextStates = i.getNextStates(action.location, action.expression, false);
         assertEquals(1, nextStates.size());
         i.goToState(nextStates.get(0));
       }

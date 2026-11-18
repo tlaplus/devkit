@@ -188,7 +188,7 @@ We can now finally define the prime operator for real, in ''visitUnaryExpr()'' i
       } case ENABLED: {
 </code>
 
-Double-priming an expression or priming an expression in the initial state are both fatal errors in TLA⁺.
+Double-priming an expression or - in the initial state - priming an expression at all are both fatal errors in TLA⁺.
 The meaning of priming an expression is that all state variables within that expression are primed, so the way the expression is evaluated is fundamentally changed.
 This is why the prime operator somewhat uniquely modifies the state of the ''Interpreter'' instance itself.
 Similar to in ''executeBlock()'', we wrap this ''Interpreter'' state modification inside a ''try''/''finally'' block to ensure that if the evaluation produces a runtime exception, ''primed'' is reset to ''false'' so the ''Interpreter'' instance is not left in a corrupted state.
@@ -255,7 +255,7 @@ Here's how we set up everything outside of the central loop:
   List<Map<String, Object>> getNextStates(Token location, Expr action) {
     Set<Map<String, Object>> confirmedNext = new HashSet<>();
     clearNext();
-    possibleNext.add(new HashMap<>(next));
+    possibleNext.add(Map.copyOf(next));
     try {
       while (!possibleNext.isEmpty()) {
 
@@ -269,7 +269,7 @@ Here's how we set up everything outside of the central loop:
 </code>
 
 We use the familiar ''try''/''finally'' approach when evaluating expressions within a modified ''Interpreter'' state to ensure runtime exceptions do not corrupt the ''Interpreter'' instance.
-We also use the ''new HashMap<>(next)'' copy constructor to copy ''next'' before putting it in ''possibleNext'', which avoids a //very// subtle bug: since evaluating the action modifies the values in ''next'', and we put ''next'' into a ''HashMap<>'' which records its position by calculating a hash of the value of ''next'', if we subsequently modify the same object put into the ''HashMap<>'' then that value will get "lost" in the datastructure, because its hash value changed.
+We also use ''Map.copyOf(next)'' to copy ''next'' and make it immutable before putting it in ''possibleNext'', which avoids a //very// subtle bug: since evaluating the action modifies the values in ''next'', and we put ''next'' into a ''HashSet<>'' which records its position by calculating a hash of the value of ''next'', if we subsequently modify the same object put into the ''HashSet<>'' then that value will get "lost" in the datastructure, because its hash value changed.
 For more on this peculiar issue, consult the Java ''[[https://docs.oracle.com/javase/8/docs/api/java/util/Map.html|Map<>]]'' documentation which warns against using mutable objects as keys.
 
 This code also requires a new ''clearNext()'' helper method in the ''Interpreter'' class, which does what you might expect from the name; it clears ''possibleNext'' then unbinds all variables in ''next'':
@@ -327,7 +327,7 @@ Modify the ''OR'' handling code in ''visitVariadicExpr()'' as highlighted:
           next = new HashMap<>(trunk);
           Object junctResult = evaluate(disjunct);
           checkBooleanOperand(expr.operator, junctResult);
-          possibleNext.add(new HashMap<>(next));
+          possibleNext.add(Map.copyOf(next));
           result |= (boolean)junctResult;
         }
         return result;
@@ -335,9 +335,9 @@ Modify the ''OR'' handling code in ''visitVariadicExpr()'' as highlighted:
 </code>
 
 There are two other operators to support for binding state variables: the set membership ''\in'' operator, and the ''\E'' existential quantification operator.
-Actions like ''x' \in {0, 1}'' or ''\E v \in {0, 1} : x' = v'' are equivalent to ''x' = 0 \/ x' = 1''.
+Actions like ''x' \in {0, 1}'' or ''\E v \in {0, 1} : x' = v'' are equivalent to ''x' = 0 \/ x' = 1''; ''x' \in {}'' and ''\E v \in {} : TRUE'' should always evaluate to false.
 Add the following code to the ''IN'' case in ''visitBinaryExpr()'':
-<code java [highlight_lines_extra="3,4,5,6,7,8,9,10,11,12"]>
+<code java [highlight_lines_extra="3,4,5,6,7,8,9,10,11"]>
       case IN:
         checkSetOperand(expr.operator, right);
         if (left instanceof UnboundVariable var) {
@@ -346,24 +346,22 @@ Add the following code to the ''IN'' case in ''visitBinaryExpr()'':
             next = new HashMap<>(trunk);
             next.put(var.name().lexeme, element);
             left = element;
-            possibleNext.add(new HashMap<>(next));
+            possibleNext.add(Map.copyOf(next));
           }
-          return true;
         }
         return ((Set<?>)right).contains(left);
 </code>
 
 Then update the ''EXISTS'' case of ''visitQuantFnExpr()'' as highlighted:
-<code java [highlight_lines_extra="3,5,8"]>
+<code java [highlight_lines_extra="4,7"]>
       } case EXISTS: {
         boolean result = false;
-        State current = state;
         Map<String, Object> trunk = next;
         for (Environment binding : bindings) {
           next = new HashMap<>(trunk);
           Object junctResult = executeBlock(expr.body, binding);
           checkBooleanOperand(expr.op, junctResult);
-          possibleNext.add(new HashMap<>(next));
+          possibleNext.add(Map.copyOf(next));
           result |= (boolean)junctResult;
         }
         return result;
@@ -414,7 +412,7 @@ Near the bottom of the ''Interpreter'' class, create a new helper method ''check
   }
 </code>
 
-In our ''EQUALS'' handling logic, we can only bind the value of ''right'' to a variable if ''right'' has a defined concrete value.
+In our ''EQUAL'' handling logic, we can only bind the value of ''right'' to a variable if ''right'' has a defined concrete value.
 Also, two values can only be compared for equality if they are both defined:
 <code java [highlight_lines_extra="3,7"]>
       case EQUAL:
@@ -427,7 +425,7 @@ Also, two values can only be compared for equality if they are both defined:
         return left.equals(right);
 </code>
 
-A null check must also must be added to the ''LEFT_BRACE'' case in ''visitVariadicExpr()'':
+A null check must also be added to the ''LEFT_BRACE'' case in ''visitVariadicExpr()'':
 <code java [highlight_lines_extra="5"]>
       case LEFT_BRACE:
         Set<Object> set = new HashSet<Object>();
@@ -466,13 +464,17 @@ And also the ''visitFnApplyExpr()'' method:
 It takes a bit of thought to consider how we should expose our new state-stepping capabilities through the REPL.
 One decent approach is to hijack ''Stmt.Print'' statements to trigger steps if they happen to define possible next states.
 For this, add the following code to the bottom of the ''run()'' method in the ''TlaPlus'' class:
-<code java [highlight_lines_extra="4,5,6,7,8,9"]>
+<code java [highlight_lines_extra="4,5,6,7,8,9,10,11,12,13"]>
     // Stop if there was a syntax error.
     if (hadError) return;
 
     if (replMode && statements.size() == 1
         && statements.get(0) instanceof Stmt.Print action) {
-      tryStep(action);
+      try {
+        tryStep(action);
+      } catch (RuntimeError error) {
+        runtimeError(error);
+      }
     } else {
       interpreter.interpret(statements);
     }
@@ -514,7 +516,7 @@ The REPL should choose one next state and make ''interpreter'' step to it; add t
     List<Map<String, Object>> nextStates =
       interpreter.getNextStates(action.location, action.expression);
     if (nextStates.isEmpty()) {
-      System.out.println(false);
+      action.accept(interpreter);
       return;
     }
 
