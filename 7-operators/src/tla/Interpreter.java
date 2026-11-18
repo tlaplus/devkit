@@ -158,7 +158,7 @@ class Interpreter implements Expr.Visitor<Object>,
     if (!function.containsKey(argument)) {
       throw new RuntimeError(expr.bracket,
           "Cannot apply function to element outside domain: "
-          + argument.toString());
+          + stringify(argument));
     }
 
     return function.get(argument);

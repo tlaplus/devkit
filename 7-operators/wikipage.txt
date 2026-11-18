@@ -17,7 +17,7 @@ Functions have not yet been defined in any form, but will be later in this tutor
 ====== Section 10.1: Function Calls ======
 
 [[https://craftinginterpreters.com/functions.html#function-calls|Section 10.1]] takes us through adding calling syntax to the parser.
-We have two separate calling syntaxes to support: function application, which use square brackets like ''f[x]'', and operator calls, which use parentheses like ''op(x)''.
+We have two separate calling syntaxes to support: function application, which uses square brackets like ''f[x]'', and operator calls, which use parentheses like ''op(x)''.
 Let's go over function application first.
 
 Similar to the book, we add a new expression type in the ''GenerateAst'' class ''main()'' method, which we'll call ''FnApply'':
@@ -46,13 +46,16 @@ While functions in TLA⁺ are values that can be passed around and constructed, 
 That is why ''FnApply'' has an ''Expr'' instance to derive the function to apply, while operators use ''Variable'' which has a ''Token'' instance to record the operator name.
 Operators can accept multiple arguments.
 
-To parse function application we need to splice a method into our recursive descent precedence chain.
-At the top of ''operatorExpression()'' in the ''Parser'' class, replace the call to ''primary()'' with a call to ''call()'':
-<code java [highlight_lines_extra="2"]>
-  private Expr operatorExpression(int prec) {
+To parse nested function application like ''f[1][2][3]'' we need to splice a method into our recursive descent precedence chain.
+In ''operatorExpression()'' in the ''Parser'' class, replace the call to ''primary()'' with a call to ''call()'':
+<code java [highlight_lines_extra="4"]>
+      return new Expr.Unary(opToken, expr);
+    }
+
     if (prec == 16) return call();
 
-    Operator op;
+    Expr expr = operatorExpression(prec + 1);
+    while ((op = matchOp(Fix.INFIX, prec)) != null) {
 </code>
 
 Then, define the ''call()'' method similar to the book (differences highlighted):
@@ -72,9 +75,9 @@ Then, define the ''call()'' method similar to the book (differences highlighted)
 </code>
 
 Our parsing task is simpler so we don't need a separate ''finishCall()'' method as suggested by the book.
-You'll note that parsing function application is strikingly similar to parsing associative postfix operators.
+You'll note that parsing function application is strikingly similar to parsing postfix operators.
 
-For operator calling, we augment our handling of identifiers in ''primary()'':
+Switching from parsing functions to operators, replace our handling of identifiers in ''primary()'' to parse operator calls like ''op(1, 2, 3)'':
 <code java [highlight_lines_extra="5,6,7,8,9,10,11,12,13,14"]>
       return new Expr.Literal(previous().literal);
     }
@@ -96,6 +99,9 @@ For operator calling, we augment our handling of identifiers in ''primary()'':
 </code>
 
 This ''do''/''while'' loop is very similar to our existing set literal parsing code for handling comma-separated expressions, so it should be familiar to you.
+
+We can now parse function & operator calls, although we can't yet construct functions or operators to call.
+Before we get to that, let's quickly define how to interpret function & operator calls.
 
 ===== Subsection 10.1.2: Interpreting function calls =====
 
@@ -122,7 +128,7 @@ Implement the ''Interpreter'' class visitor method for ''Expr.FnApply'':
   }
 </code>
 
-Now we can apply functions, although we can't yet define them.
+Now we can apply functions, although - again - we can't yet define them.
 Next up is operators.
 Here we completely rewrite our ''visitVariableExpr()'' method in the ''Interpreter'' class to resemble the ''visitCallExpr()'' method from the book:
 <code java>
@@ -150,11 +156,11 @@ interface TlaCallable {
   Object call(Interpreter interpreter, List<Object> arguments);
 }
 </code>
-We can now call operators, although cannot yet define operators to call!
+We can now call our not-yet-existing functions & operators!
 
 ===== Subsection 10.1.3: Call type errors =====
 
-In ''visitFnApply()'', we should validate that our ''callee'' is actually a function:
+In ''visitFnApplyExpr()'', we should validate that our ''callee'' is actually a function:
 <code java [highlight_lines_extra="4"]>
   @Override
   public Object visitFnApplyExpr(Expr.FnApply expr) {
@@ -179,7 +185,7 @@ We should also check that the function is actually defined on the given argument
     if (!function.containsKey(argument)) {
       throw new RuntimeError(expr.bracket,
           "Cannot apply function to element outside domain: "
-          + argument.toString());
+          + stringify(argument));
     }
 
     return function.get(argument);
@@ -238,7 +244,7 @@ For functions, we don't need to check arity because the single-argument restrict
 ====== Section 10.2: Native Functions ======
 
 In [[https://craftinginterpreters.com/functions.html#native-functions|Section 10.2]] we learn how to implement primitive/native functions.
-We've already implemented all our native TLA⁺ functions in the //[[creating:evaluation|Evaluating Constant TLA⁺ Expressions]]// chapter, but we will follow along to add a crucial field to the ''Interpreter'' class: a global environment.
+We've already implemented what the book would call our native/built-in TLA⁺ functions in the //[[creating:evaluation|Evaluating Constant TLA⁺ Expressions]]// chapter, but we will follow along to add a crucial field to the ''Interpreter'' class: a global environment.
 Due to the ''replMode'' parameter we have to put the initialization logic in the constructor (new code highlighted):
 <code java [highlight_lines_extra="3,7,8"]>
 class Interpreter implements Expr.Visitor<Object>,
@@ -252,7 +258,7 @@ class Interpreter implements Expr.Visitor<Object>,
   }
 </code>
 
-Note that the ''globals'' field has package visibility, not class visibility.
+Note that the ''globals'' field has package visibility, not private visibility.
 The use of this field will become clear when implementing the ''TlaCallable.call()'' interface method.
 
 ====== Section 10.3: Function Declarations ======
@@ -264,6 +270,7 @@ We want to parse operator definitions like ''op(x, y, z) == expr'' and also ''op
 ''op() == expr'' is invalid syntax in TLA⁺.
 We will use the now-familiar ''do''/''while'' method of consuming one or more comma-separated values.
 Recall that ''isAtOpDefStart()'' is a lookahead method to determine whether the upcoming token sequence is an operator definition, while ''operatorDefinition()'' actually parses that same token sequence into an AST node.
+Additions:
 <code java [highlight_lines_extra="3,4,5,6,7,8"]>
   private boolean isAtOpDefStart() {
     if (!match(IDENTIFIER)) return false;
@@ -379,21 +386,20 @@ class TlaOperator implements TlaCallable {
 }
 </code>
 
-The implementation of the ''call()'' method is exactly as defined in the book:
-<code java>
+The implementation of the ''call()'' method is very similar to that defined in the book (differences highlighted):
+<code java [highlight_lines_extra="6,9"]>
   @Override
   public Object call(Interpreter interpreter,
                      List<Object> arguments) {
     Environment environment = new Environment(interpreter.globals);
     for (int i = 0; i < declaration.params.size(); i++) {
-      environment.define(declaration.params.get(i).lexeme,
-          arguments.get(i));
+      environment.define(declaration.params.get(i), arguments.get(i));
     }
 
-    interpreter.executeBlock(declaration.body, environment);
-    return null;
+    return interpreter.executeBlock(declaration.body, environment);
   }
 </code>
+
 Here we see the usage of ''interpreter.globals''; we define the argument values within a new ''Environment'' instance, but the parent of that ''Environment'' is the root global instance instead of the current instance.
 This is so nested operator calls do not propagate their argument values to the nested callee.
 
@@ -559,8 +565,9 @@ A ''BindingGenerator'' instance!
 
 Before getting too far into the weeds with the ''BindingGenerator'' iterator algorithm, let's just assume it works and fill out the rest of ''visitQuantFnExpr()''.
 Construct a ''BindingGenerator'' instance atop the ''switch'' statement:
-<code java [highlight_lines_extra="4"]>
+<code java [highlight_lines_extra="5"]>
   public Object visitQuantFnExpr(Expr.QuantFn expr) {
+    checkNotDefined(expr.params);
     Object set = evaluate(expr.set);
     checkSetOperand(expr.op, set);
     BindingGenerator bindings = new BindingGenerator(expr.params, (Set<?>)set, environment);
@@ -597,7 +604,7 @@ Finally, here's how we implement the ''ALL_MAP_TO'' case; we want to construct a
 
 ====== Set Enumeration ======
 
-Now that we've finished all that, let's get to the real difficult part: implementing an enumeration algorithm in ''BindingGenerator''.
+Now that we've finished all that, let's get to the really difficult part: implementing an enumeration algorithm in ''BindingGenerator''.
 A moment of consideration is in order.
 If you had to bind a set of variables to every combination of values from a set, how would you do it?
 To computer scientists, the connection between enumerating every possible combination of values and incrementing numbers in an arbitrary base is readily made.
@@ -628,7 +635,7 @@ As you can see, we generated every possible binding of ''{a, b, c}'' to ''x'' an
 Each identifier is assigned a particular digit in the number, and their value in a binding is given by that digit's value in the enumeration.
 
 We're almost there, but not quite; Java doesn't have the built-in ability to iterate through numbers in a particular base.
-We will need to increment a regular ''int'' counter and //convert// it into the desired base, then extract the value of each digit.
+We will need to increment a ''long'' counter and //convert// it into the desired base, then extract the value of each digit.
 Actually the well-known [[https://en.wikipedia.org/wiki/Positional_notation#Base_conversion|base conversion]] algorithm lets us do both at once!
 It is quite elegant; given a number ''n'' and a desired base ''b'', the value of the least-significant digit can be found by calculating ''n % b'' (''%'' meaning mod, giving the division remainder).
 Then, assign ''n' = n / b'' (using integer division, so throw away the remainder) and repeat for as many digits as desired.
@@ -656,7 +663,7 @@ class BindingGenerator implements Iterator<Environment>,
   private final List<Token> vars;
   private final List<Object> set;
   private final Environment parent;
-  private int enumerationIndex = 0;
+  private long enumerationIndex = 0;
 </code>
 
 Then, implement ''hasNext()''.
@@ -670,15 +677,18 @@ For ''n'' digits in base ''b'', there are ''bⁿ'' possible values to iterate th
   }
 </code>
 
+Note that ''Math.pow()'' returns a ''double'' instead of a ''long'', but this would only calculate an incorrect integer value above 9 quadrillion or so - perfectly acceptable for our purposes.
+It is worth making ''enumerationIndex'' a ''long'' instead of an ''int'', as binding two identifiers over a 46,341-element set or three identifiers over a 1,291-element set will both overflow a 32-bit signed integer. 
+
 Now for the main event.
-Here's the strikingly simple code implementing the change-of-base algorithm in the ''next()'' method required by the ''Iterator<>'' interface:
+Here's the strikingly simple code implementing the change-of-base algorithm in the ''next()'' method required by the ''Iterator<>'' interface - explanation of the algorithm was much longer than the code necessary to implement it!
 <code java>
   @Override
   public Environment next() {
-    int current = enumerationIndex++;
+    long current = enumerationIndex++;
     Environment bindings = new Environment(parent);
     for (Token var : vars) {
-      bindings.define(var, set.get(current % set.size()));
+      bindings.define(var, set.get((int)(current % set.size())));
       current /= set.size();
     }
 
