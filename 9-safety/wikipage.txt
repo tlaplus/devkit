@@ -153,7 +153,7 @@ With all that out of the way, here's how we write the preamble to the main BFS l
   StateTrace checkSafety() {
     Deque<Map<String, Object>> pendingStates = new ArrayDeque<>();
     Map<Map<String, Object>, Map<String, Object>> predecessors = new HashMap<>();
-    for (Map<String, Object> initialState : interpreter.getNextStates(init.name, init.body)) {
+    for (Map<String, Object> initialState : interpreter.getNextStates(init.name, init.body, false)) {
       predecessors.put(initialState, null);
       pendingStates.add(initialState);
     }
@@ -173,7 +173,7 @@ Here is the rest of the BFS algorithm, a loop that runs in ''checkSafety()'' unt
       Map<String, Object> current = pendingStates.remove();
       interpreter.goToState(current);
 
-      for (Map<String, Object> next : interpreter.getNextStates(next.name, next.body)) {
+      for (Map<String, Object> next : interpreter.getNextStates(next.name, next.body, false)) {
         if (!predecessors.containsKey(next)) {
           predecessors.put(next, current);
           pendingStates.add(next);

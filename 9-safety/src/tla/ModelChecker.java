@@ -52,7 +52,7 @@ class ModelChecker {
   StateTrace checkSafety() {
     Deque<Map<String, Object>> pendingStates = new ArrayDeque<>();
     Map<Map<String, Object>, Map<String, Object>> predecessors = new HashMap<>();
-    for (Map<String, Object> initialState : interpreter.getNextStates(init.name, init.body)) {
+    for (Map<String, Object> initialState : interpreter.getNextStates(init.name, init.body, false)) {
       predecessors.put(initialState, null);
       pendingStates.add(initialState);
     }
@@ -66,7 +66,7 @@ class ModelChecker {
         }
       }
 
-      for (Map<String, Object> next : interpreter.getNextStates(next.name, next.body)) {
+      for (Map<String, Object> next : interpreter.getNextStates(next.name, next.body, false)) {
         if (!predecessors.containsKey(next)) {
           predecessors.put(next, current);
           pendingStates.add(next);

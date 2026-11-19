@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 
 public class TlaPlus {
+  private static BufferedReader reader =
+      new BufferedReader(new InputStreamReader(System.in));
   private static Interpreter interpreter;
   static boolean hadError = false;
   static boolean hadRuntimeError = false;
@@ -37,8 +39,6 @@ public class TlaPlus {
 
   private static void runPrompt() throws IOException {
     interpreter = new Interpreter(true);
-    InputStreamReader input = new InputStreamReader(System.in);
-    BufferedReader reader = new BufferedReader(input);
 
     for (;;) {
       System.out.print("> ");
@@ -49,7 +49,7 @@ public class TlaPlus {
     }
   }
 
-  private static void run(String source, boolean replMode) {
+  private static void run(String source, boolean replMode) throws IOException {
     Scanner scanner = new Scanner(source);
     List<Token> tokens = scanner.scanTokens();
 
@@ -62,7 +62,11 @@ public class TlaPlus {
     System.out.println(new AstPrinter().print(statements));
     if (replMode && statements.size() == 1
         && statements.get(0) instanceof Stmt.Print action) {
-      tryStep(action);
+      try {
+        tryStep(action);
+      } catch (RuntimeError error) {
+        runtimeError(error);
+      }
     } else {
       interpreter.interpret(statements);
     }
@@ -78,7 +82,7 @@ public class TlaPlus {
     }
   }
 
-  private static void tryStep(Stmt.Print action) {
+  private static void tryStep(Stmt.Print action) throws IOException {
     Object result = interpreter.executeBlock(action.expression, interpreter.globals);
     if (!(result instanceof Boolean)) {
       action.accept(interpreter);
@@ -86,7 +90,7 @@ public class TlaPlus {
     }
 
     List<Map<String, Object>> nextStates =
-      interpreter.getNextStates(action.location, action.expression);
+      interpreter.getNextStates(action.location, action.expression, false);
     if (nextStates.isEmpty()) {
       action.accept(interpreter);
       return;
@@ -98,7 +102,7 @@ public class TlaPlus {
     System.out.println(nextState);
   }
 
-  private static Map<String, Object> pickNext(List<Map<String, Object>> nextStates) {
+  private static Map<String, Object> pickNext(List<Map<String, Object>> nextStates) throws IOException {
     if (nextStates.size() == 1) {
       return nextStates.get(0);
     } else {
@@ -108,9 +112,7 @@ public class TlaPlus {
       }
 
       System.out.print("> ");
-      try (java.util.Scanner in = new java.util.Scanner(System.in)) {
-        return nextStates.get(in.nextInt());
-      }
+      return nextStates.get(Integer.parseInt(reader.readLine()));
     }
   }
 
