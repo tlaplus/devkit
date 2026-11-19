@@ -6,13 +6,11 @@ Statements were added next, then we mastered the difficult art of parsing conjun
 Finally, we learned how to apply operators and move between states.
 Everything is in place; it is time to write a TLA⁺ model-checker.
 
-We will write a checker for TLA⁺ safety properties.
+We will write a checker for TLA⁺ invariants, which are a type of safety property.
 Formally, safety properties are properties that can be disproven by a counterexample state trace of finite length.
-This is a bit abstract; in concrete terms, safety properties are expressions that evaluate to either true or false in different system states.
-Ideally, a safety property is true in //every// system state!
-Safety properties are often informally described as "nothing bad happens" properties, also called //invariants//.
-For example, when developing a multi-core CPU memory caching system, a good safety property would be that no two CPU caches ever disagree about the value stored at a given memory address.
-However, our systems often surprise us and find their way to corners of the state space where a safety property does not hold.
+Invariants are often described as "nothing bad happens" properties.
+For example, when developing a multi-core CPU memory caching system, one possible invariant is that no two CPU caches ever disagree about the value stored at a given memory address.
+However, our systems often surprise us and find their way to corners of the state space where an invariant does not hold.
 When that happens, the best way to debug the problem is to see a path from some initial state to the state violating the invariant.
 This path is what is meant by a state trace counterexample of finite length.
 It isn't enough to just produce a state violating the invariant; we must also show how the system got there!
@@ -20,7 +18,7 @@ That is the task of this chapter.
 
 Inquisitive readers might wonder what sort of properties require counterexamples of //in//finite length.
 Those are what we call liveness properties, or "something good eventually happens" properties.
-A counterexample to something good eventually happening is a state trace ending in an infinite loop, showing it is possible for the system to run forever without ever satisfying the liveness property.
+For finite-state systems, a counterexample to something good eventually happening is a state trace ending in an infinite loop, showing it is possible for the system to run forever without ever satisfying the liveness property.
 Liveness properties (and how to check them) are a fascinating topic, but beyond the scope of this chapter.
 
 ===== Initializing the Model =====
@@ -32,7 +30,7 @@ Our overall approach to checking safety properties has the following structure:
   - Check to ensure the invariants hold in every discovered state.
   - If a state violates an invariant, construct a state trace leading from some initial state to the violating state.
 
-For this purpose, create a new file ''ModelChecker.java'' and pre-emptively import all the datastructures we'll need.
+For this purpose, create a new file ''ModelChecker.java'' and pre-emptively import all the data structures we'll need.
 Also define a constructor accepting an ''Interpreter'' instance and a list of parsed ''Stmt'' objects comprising the TLA⁺ spec:
 <code java>
 package tla;
@@ -116,9 +114,9 @@ Create a new ''checkSafety()'' method in the ''ModelChecker'' class:
   }
 </code>
 
-This method indicates success (the invariants holds in every state) by returning ''null''.
+This method indicates success (the invariants hold in every state) by returning ''null''.
 If the invariants do not hold in every state, the method returns a state trace leading to the failing state.
-Define the ''StateTrace'' record near the top of the ''ModelChecker'' class:
+Define the ''Step'' and ''StateTrace'' record near the top of the ''ModelChecker'' class:
 <code java [highlight_lines_extra="3,4"]>
 class ModelChecker {
 
@@ -139,9 +137,9 @@ It works as follows:
   - For each next state, if it has not already been visited then push it onto the pending state queue and add it to the set of visited states.
 
 Not too bad!
-Only two datastructures, a queue to hold the pending states and a set to record all the states we've visited.
-Assuming there are a finite number of states, BFS will eventually examine all states then terminate.
-If there are an infinite number of states - an easy-to-accomplish feat in TLA⁺ - then BFS will never terminate, but that is a user problem.
+Only two data structures, a queue to hold the pending states and a set to record all the states we've visited.
+Assuming there is a finite number of states, BFS will eventually examine all states then terminate.
+If there is an infinite number of states - an easy-to-accomplish feat in TLA⁺ - then BFS will never terminate, but that is a user problem.
 
 There is one more thing we need to keep track of so we can reconstruct state traces: each state's predecessor, the state from which we first stepped to it.
 This combines nicely with the visited set; instead of a set of states, we use a map from states to their predecessors.
@@ -205,7 +203,7 @@ If an invariant fails then we return a state trace!
 How do we construct that trace?
 Here is how to implement the ''reconstructStateTrace()'' helper for the ''ModelChecker'' class; first, use the ''predecessors'' graph to walk backward from the failing state to an initial state, then reverse the list of states:
 <code java>
-  List<Map<String, Object>> reconstructStateTrace(
+  StateTrace reconstructStateTrace(
       Map<Map<String, Object>, Map<String, Object>> predecessors,
       Map<String, Object> state,
       Stmt.OpDef invariant
@@ -317,7 +315,7 @@ Inv == \A j \in Jug : ~(contents[j] = Goal)
 
 You can vary the problem definition by modifying the definition of ''Jug'' and the ''Capacity'' map.
 As-is, it checks the classic Die Hard jugs puzzle with one 3-gallon jug and one 5-gallon jug.
-We set the invariant to assert that no jug will every contain 4 gallons of water.
+We set the invariant to assert that no jug will ever contain 4 gallons of water.
 When run on this spec, our model-checker spits out a state trace showing how to get 4 gallons of water in the 5-gallon jug!
 
 After all the preliminary work, this chapter was surprisingly short.
