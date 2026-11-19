@@ -578,13 +578,15 @@ One important thing to note is that unlike in ''TlaOperator'', we give ''Binding
 op(x) == \A y \in 0 .. 2 : y < x
 </code>
 Here's how we implement the ''EXISTS'' case; unlike universal quantification, existential quantification is not short-circuiting in TLA⁺ (for reasons that will become clear in the next chapter):
-<code java [highlight_lines_extra="2,3,4,5,6,7,8"]>
+<code java [highlight_lines_extra="2,3,4,5,6,7,8,9,10"]>
       } case EXISTS: {
         boolean result = false;
         for (Environment binding : bindings) {
           Object junctResult = executeBlock(expr.body, binding);
           checkBooleanOperand(expr.op, junctResult);
-          result |= (boolean)junctResult;
+          if ((boolean)junctResult) {
+            result = true;
+          }
         }
         return result;
       } default: {

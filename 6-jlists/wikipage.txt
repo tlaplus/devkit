@@ -273,14 +273,16 @@ Add conjunction list evaluation logic to ''visitVariadicExpr()'' in the ''Interp
 </code>
 
 Then add the disjunction list logic right below that:
-<code java [highlight_lines_extra="2,3,4,5,6,7,8,9"]>
+<code java [highlight_lines_extra="2,3,4,5,6,7,8,9,10,11"]>
         return true;
       case OR:
         boolean result = false;
         for (Expr disjunct : expr.parameters) {
           Object junctResult = evaluate(disjunct);
           checkBooleanOperand(expr.operator, junctResult);
-          result |= (boolean)junctResult;
+          if ((boolean)junctResult) {
+            result = true;
+          }
         }
         return result;
       default:

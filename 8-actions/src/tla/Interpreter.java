@@ -45,7 +45,7 @@ class Interpreter implements Expr.Visitor<Object>,
     stmt.accept(this);
   }
 
-  List<Map<String, Object>> getNextStates(Token location, Expr action, boolean allowIncompleteStates) {
+  List<Map<String, Object>> getNextStates(Token location, Expr action, boolean acceptIncompleteStates) {
     Set<Map<String, Object>> confirmedNext = new HashSet<>();
     clearNext();
     possibleNext.add(Map.copyOf(next));
@@ -55,7 +55,7 @@ class Interpreter implements Expr.Visitor<Object>,
         next = new HashMap<>(trunk);
         Object satisfied = evaluate(action);
         checkBooleanOperand(location, satisfied);
-        if ((boolean)satisfied && (isComplete() || allowIncompleteStates)) {
+        if ((boolean)satisfied && (isComplete() || acceptIncompleteStates)) {
           confirmedNext.add(Map.copyOf(next));
         }
         possibleNext.remove(trunk);

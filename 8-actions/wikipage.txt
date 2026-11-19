@@ -361,7 +361,7 @@ Add the following code to the ''IN'' case in ''visitBinaryExpr()'':
 </code>
 
 Then update the ''EXISTS'' case of ''visitQuantFnExpr()'' as highlighted:
-<code java [highlight_lines_extra="3,4,6,10,11"]>
+<code java [highlight_lines_extra="3,4,6,10,11,15"]>
       } case EXISTS: {
         boolean result = false;
         Map<String, Object> trunk = next;
@@ -389,19 +389,39 @@ An expression ''ENABLED Action'' evaluates to ''true'' if ''Action'' produces at
 So, as simple as a quick call to ''getNextStates()'' to see whether it returns an empty list or not!
 Well, not quite - the ''ENABLED'' operator can possibly be evaluated //inside// an action, so inside a call to ''getNextStates()''!
 This means we need some extra ceremony to stash the current values of ''next'' and ''possibleNext'', then restore them using the standard ''try''/''finally'' block method.
+''ENABLED'' also accepts incomplete states, so ''getNextStates()'' will need to be modified to support that.
 Add the highlighted code to the ''ENABLED'' case in ''visitUnaryExpr()'':
 <code java [highlight_lines_extra="2,3,4,5,6,7,8,9"]>
       } case ENABLED: {
         Map<String, Object> oldNext = next;
         Set<Map<String,Object>> oldPossibleNext = possibleNext;
         try {
-          return !getNextStates(expr.operator, expr.expr).isEmpty();
+          return !getNextStates(expr.operator, expr.expr, true).isEmpty();
         } finally {
           next = oldNext;
           possibleNext = oldPossibleNext;
         }
       } case NOT: {
 </code>
+
+Then modify ''getNextStates()'' by adding a new parameter, ''acceptIncompleteStates'', which allows it to add incomplete states to the ''confirmedNext'' set as required by ''ENABLED'':
+<code java [highlight_lines_extra="1,11"]>
+  List<Map<String, Object>> getNextStates(Token location, Expr action, boolean acceptIncompleteStates) {
+    Set<Map<String, Object>> confirmedNext = new HashSet<>();
+    clearNext();
+    possibleNext.add(Map.copyOf(next));
+    try {
+      while (!possibleNext.isEmpty()) {
+        Map<String, Object> trunk = possibleNext.iterator().next();
+        next = new HashMap<>(trunk);
+        Object satisfied = evaluate(action);
+        checkBooleanOperand(location, satisfied);
+        if ((boolean)satisfied && (isComplete() || acceptIncompleteStates)) {
+          confirmedNext.add(Map.copyOf(next));
+        }
+</code>
+
+This change lets ''ENABLED Action'' only have ''Action'' determine the value of //some// of the spec's variables, instead of requiring it determine all of them.
 
 This is a big milestone: we now have fully defined //everything// in our minimal TLA⁺ language subset!
 We aren't at the end yet, but it's well within sight.
@@ -506,7 +526,7 @@ If this generates no new states, again treat ''action'' as an ordinary ''Stmt.Pr
     }
 
     List<Map<String, Object>> nextStates =
-      interpreter.getNextStates(action.location, action.expression);
+      interpreter.getNextStates(action.location, action.expression, false);
     if (nextStates.isEmpty()) {
       action.accept(interpreter);
       return;
@@ -526,7 +546,7 @@ At this point all that remains is to handle the case of what happens when the ''
 The REPL should choose one next state and make ''interpreter'' step to it; add this to the bottom of ''tryStep()'':
 <code java [highlight_lines_extra="8,9,10,11,12"]>
     List<Map<String, Object>> nextStates =
-      interpreter.getNextStates(action.location, action.expression);
+      interpreter.getNextStates(action.location, action.expression, 547);
     if (nextStates.isEmpty()) {
       action.accept(interpreter);
       return;
