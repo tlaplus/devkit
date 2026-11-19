@@ -223,13 +223,18 @@ class Interpreter implements Expr.Visitor<Object>,
       } case EXISTS: {
         boolean result = false;
         Map<String, Object> trunk = next;
+        Map<String, Object> lastValidNext = trunk;
         for (Environment binding : bindings) {
           next = new HashMap<>(trunk);
           Object junctResult = executeBlock(expr.body, binding);
           checkBooleanOperand(expr.op, junctResult);
-          possibleNext.add(Map.copyOf(next));
-          result |= (boolean)junctResult;
+          if ((boolean)junctResult) {
+            possibleNext.add(Map.copyOf(next));
+            lastValidNext = next;
+            result = true;
+          }
         }
+        next = lastValidNext;
         return result;
       } default: {
         // Unreachable.
@@ -304,7 +309,6 @@ class Interpreter implements Expr.Visitor<Object>,
         Map<String, Object> oldNext = next;
         Set<Map<String,Object>> oldPossibleNext = possibleNext;
         try {
-          clearNext();
           return !getNextStates(expr.operator, expr.expr, true).isEmpty();
         } finally {
           next = oldNext;
@@ -360,13 +364,18 @@ class Interpreter implements Expr.Visitor<Object>,
       case OR:
         boolean result = false;
         Map<String, Object> trunk = next;
+        Map<String, Object> lastValidNext = trunk;
         for (Expr disjunct : expr.parameters) {
           next = new HashMap<>(trunk);
           Object junctResult = evaluate(disjunct);
           checkBooleanOperand(expr.operator, junctResult);
-          possibleNext.add(Map.copyOf(next));
-          result |= (boolean)junctResult;
+          if ((boolean)junctResult) {
+            possibleNext.add(Map.copyOf(next));
+            lastValidNext = next;
+            result = true;
+          }
         }
+        next = lastValidNext;
         return result;
       default:
         // Unreachable.

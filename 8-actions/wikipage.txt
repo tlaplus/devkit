@@ -150,12 +150,12 @@ Also augment the ''checkNotDefined()'' helper method, so state variables cannot 
 To resolve variable values, modify the ever-more-complicated ''visitVariableExpr()'' method of the ''Interpreter'' class to first check whether it's resolving a variable, falling back to an ''environment'' lookup if not:
 <code java [highlight_lines_extra="2,3,4,5"]>
   public Object visitVariableExpr(Expr.Variable expr) {
-    Object referent =
+    Object callee =
       variables.containsKey(expr.name.lexeme)
       ? (primed ? next : current).get(expr.name.lexeme)
       : environment.get(expr.name);
 
-    if (!(referent instanceof TlaCallable)) {
+    if (!(callee instanceof TlaCallable)) {
 </code>
 
 This makes use of yet another field we must add to the ''Interpreter'' class, ''primed'':
@@ -290,7 +290,9 @@ Now we can write the central ''getNextStates()'' loop:
         next = new HashMap<>(trunk);
         Object satisfied = evaluate(action);
         checkBooleanOperand(location, satisfied);
-        if ((boolean)satisfied && isComplete()) confirmedNext.add(next);
+        if ((boolean)satisfied && isComplete()) {
+          confirmedNext.add(Map.copyOf(next));
+        }
         possibleNext.remove(trunk);
       }
 </code>
@@ -315,21 +317,27 @@ Thus the number of variables bound to concrete values in ''possibleNext'' increa
 
 Let's get concrete.
 How do we add states to ''possibleNext'' while evaluating disjunction?
-For each disjunct, we use a fresh copy of the ''next'' state, then evaluate the disjunct and add the resulting modified ''next'' state to ''possibleNext''.
+For each disjunct, we use a fresh copy of the ''next'' state, then evaluate the disjunct and - if the disjunct evaluates to true - add the resulting modified ''next'' state to ''possibleNext''.
 As described above, this state will either already be in ''possibleNext'' (so be de-duplicated) or have bound the value of at least one more state variable.
 We need to evaluate every disjunct to ensure we find all possible next states, which is why TLA⁺ disjunction does not short-circuit.
+We also need to ensure that at the end of evaluation, ''next'' points to a state resulting from a true disjunct.
 Modify the ''OR'' handling code in ''visitVariadicExpr()'' as highlighted:
-<code java [highlight_lines_extra="3,5,8"]>
+<code java [highlight_lines_extra="3,4,6,10,11,15"]>
       case OR:
         boolean result = false;
         Map<String, Object> trunk = next;
+        Map<String, Object> lastValidNext = trunk;
         for (Expr disjunct : expr.parameters) {
           next = new HashMap<>(trunk);
           Object junctResult = evaluate(disjunct);
           checkBooleanOperand(expr.operator, junctResult);
-          possibleNext.add(Map.copyOf(next));
-          result |= (boolean)junctResult;
+          if ((boolean)junctResult) {
+            possibleNext.add(Map.copyOf(next));
+            lastValidNext = next;
+            result = true;
+          }
         }
+        next = lastValidNext;
         return result;
       default:
 </code>
@@ -353,17 +361,22 @@ Add the following code to the ''IN'' case in ''visitBinaryExpr()'':
 </code>
 
 Then update the ''EXISTS'' case of ''visitQuantFnExpr()'' as highlighted:
-<code java [highlight_lines_extra="4,7"]>
+<code java [highlight_lines_extra="3,4,6,10,11"]>
       } case EXISTS: {
         boolean result = false;
         Map<String, Object> trunk = next;
+        Map<String, Object> lastValidNext = trunk;
         for (Environment binding : bindings) {
           next = new HashMap<>(trunk);
           Object junctResult = executeBlock(expr.body, binding);
           checkBooleanOperand(expr.op, junctResult);
-          possibleNext.add(Map.copyOf(next));
-          result |= (boolean)junctResult;
+          if ((boolean)junctResult) {
+            possibleNext.add(Map.copyOf(next));
+            lastValidNext = next;
+            result = true;
+          }
         }
+        next = lastValidNext;
         return result;
 </code>
 
@@ -377,12 +390,11 @@ So, as simple as a quick call to ''getNextStates()'' to see whether it returns a
 Well, not quite - the ''ENABLED'' operator can possibly be evaluated //inside// an action, so inside a call to ''getNextStates()''!
 This means we need some extra ceremony to stash the current values of ''next'' and ''possibleNext'', then restore them using the standard ''try''/''finally'' block method.
 Add the highlighted code to the ''ENABLED'' case in ''visitUnaryExpr()'':
-<code java [highlight_lines_extra="2,3,4,5,6,7,8,9,10"]>
+<code java [highlight_lines_extra="2,3,4,5,6,7,8,9"]>
       } case ENABLED: {
         Map<String, Object> oldNext = next;
         Set<Map<String,Object>> oldPossibleNext = possibleNext;
         try {
-          clearNext();
           return !getNextStates(expr.operator, expr.expr).isEmpty();
         } finally {
           next = oldNext;
@@ -528,7 +540,7 @@ The REPL should choose one next state and make ''interpreter'' step to it; add t
 </code>
 
 We also print out ''true'' - the value ''Stmt.Print'' would have printed - and display the value of the next state for the user.
-This called two methods; one, ''goToState()'' in ''Interpreter'', sets the ''current'' state to the one given:
+This calls two methods; one, ''goToState()'' in ''Interpreter'', sets the ''current'' state to the one given:
 <code java>
   void goToState(Map<String, Object> state) {
     current = state;
