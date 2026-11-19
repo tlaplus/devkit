@@ -284,7 +284,7 @@ This code also requires a new ''clearNext()'' helper method in the ''Interpreter
 </code>
 
 Now we can write the central ''getNextStates()'' loop:
-<code java [highlight_lines_extra="2,3,4,5,6,7"]>
+<code java [highlight_lines_extra="2,3,4,5,6,7,8,9"]>
       while (!possibleNext.isEmpty()) {
         Map<String, Object> trunk = possibleNext.iterator().next();
         next = new HashMap<>(trunk);
@@ -546,7 +546,7 @@ At this point all that remains is to handle the case of what happens when the ''
 The REPL should choose one next state and make ''interpreter'' step to it; add this to the bottom of ''tryStep()'':
 <code java [highlight_lines_extra="8,9,10,11,12"]>
     List<Map<String, Object>> nextStates =
-      interpreter.getNextStates(action.location, action.expression, 547);
+      interpreter.getNextStates(action.location, action.expression, false);
     if (nextStates.isEmpty()) {
       action.accept(interpreter);
       return;
@@ -572,7 +572,7 @@ This calls two methods; one, ''goToState()'' in ''Interpreter'', sets the ''curr
 The other, in ''TlaPlus'', picks the next state to step to.
 If there are multiple possible next states, the user is prompted to choose one:
 <code java>
-  private static Map<String, Object> pickNext(List<Map<String, Object>> nextStates) {
+  private static Map<String, Object> pickNext(List<Map<String, Object>> nextStates) throws IOException {
     if (nextStates.size() == 1) {
       return nextStates.get(0);
     } else {
@@ -582,11 +582,19 @@ If there are multiple possible next states, the user is prompted to choose one:
       }
 
       System.out.print("> ");
-      try (java.util.Scanner in = new java.util.Scanner(System.in)) {
-        return nextStates.get(in.nextInt());
-      }
+      return nextStates.get(Integer.parseInt(reader.readLine()));
     }
   }
+</code>
+
+Since we are reading from ''System.in'' here, the ''throws IOException'' clause percolates back up the call stack:
+<code java [highlight_lines_extra="1"]>
+  private static void tryStep(Stmt.Print action) throws IOException {
+    Object result = interpreter.executeBlock(action.expression, interpreter.globals);
+</code>
+<code java [highlight_lines_extra="1"]>
+  private static void run(String source, boolean replMode) throws IOException {
+    Scanner scanner = new Scanner(source);
 </code>
 
 And that's it!

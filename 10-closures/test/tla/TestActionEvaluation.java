@@ -285,4 +285,28 @@ public class TestActionEvaluation {
         Map.of("x", 2)
     );
   }
+
+  @Test
+  public void falseDisjunctRegressionTest() {
+    assertEquals(List.of(Map.of("x", 0)), getNextStates("VARIABLE x", "x = 0 \\/ (x = 1 /\\ FALSE)"));
+    assertEquals(List.of(Map.of("x", 0)), getNextStates("VARIABLE x", "\\E v \\in {0, 1} : x = v /\\ ~(x = 1)"));
+    assertEquals(List.of(Map.of("x", 1)), getNextStates("VARIABLE x", "\\E v \\in {0, 1} : x = v /\\ ~(x = 0)"));
+  }
+
+  @Test
+  public void emptySetRegressionTest() {
+    assertEquals("false", Utils.interpret("VARIABLE x x \\in {}"));
+    assertEquals("false", Utils.interpret("VARIABLE x \\E v \\in {} : x = v"));
+  }
+
+  @Test
+  public void testRegressionEnabledPartialState() {
+    String spec = """
+        VARIABLES x, y
+        Init == x = 0 /\\ y = 0
+        Next == FALSE
+        Inv == ENABLED (x' = 1)
+        """;
+    isTrace(spec, Map.of("x", 0, "y", 0));
+  }
 }
