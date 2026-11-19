@@ -7,10 +7,10 @@ For each section in the chapter, first read the section in the book and then rea
 ====== Section 4.1: The Interpreter Framework ======
 
 Almost everything in [[https://craftinginterpreters.com/scanning.html#the-interpreter-framework|section 4.1]] can be left unchanged from what's given, although of course it makes sense to change some of the names from "Lox" to "TlaPlus" or similar.
-We do make one small functional modification: TLA⁺ source files are assumed to be encoded in UTF-8, a variable-width ASCII-compatible encoding, so we specify that when performing the file read.
+We do make some small modifications: TLA⁺ source files are assumed to be encoded in UTF-8, a variable-width ASCII-compatible encoding, so we specify that when performing the file read; we also make the ''BufferedReader'' instance a class variable instead of a local variable, so ignore its definition in ''runPrompt()''.
 Here's our main file, ''TlaPlus.java'':
 
-<code java [enable_line_numbers="true",highlight_lines_extra="1,6,11,27"]>
+<code java [enable_line_numbers="true",highlight_lines_extra="1,6,11,12,13,29"]>
 package tla;
 
 import java.io.BufferedReader;
@@ -22,6 +22,8 @@ import java.nio.file.Paths;
 import java.util.List;
 
 public class TlaPlus {
+  private static BufferedReader reader =
+      new BufferedReader(new InputStreamReader(System.in));
   static boolean hadError = false;
 
   public static void main(String[] args) throws IOException {
@@ -44,8 +46,6 @@ public class TlaPlus {
   }
 
   private static void runPrompt() throws IOException {
-    InputStreamReader input = new InputStreamReader(System.in);
-    BufferedReader reader = new BufferedReader(input);
 
     for (;;) {
       System.out.print("> ");

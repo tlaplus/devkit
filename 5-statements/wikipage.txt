@@ -164,11 +164,9 @@ Then modify the ''runFile()'' method as follows:
 
 Similarly modify the ''runPrompt'' method:
 
-<code java [highlight_lines_extra="2,10"]>
+<code java [highlight_lines_extra="2,8"]>
   private static void runPrompt() throws IOException {
     interpreter = new Interpreter(true);
-    InputStreamReader input = new InputStreamReader(System.in);
-    BufferedReader reader = new BufferedReader(input);
 
     for (;;) {
       System.out.print("> ");

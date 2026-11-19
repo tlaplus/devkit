@@ -9,6 +9,8 @@ import java.nio.file.Paths;
 import java.util.List;
 
 public class TlaPlus {
+  private static BufferedReader reader =
+      new BufferedReader(new InputStreamReader(System.in));
   private static Interpreter interpreter;
   static boolean hadError = false;
   static boolean hadRuntimeError = false;
@@ -36,8 +38,6 @@ public class TlaPlus {
 
   private static void runPrompt() throws IOException {
     interpreter = new Interpreter(true);
-    InputStreamReader input = new InputStreamReader(System.in);
-    BufferedReader reader = new BufferedReader(input);
 
     for (;;) {
       System.out.print("> ");
