@@ -309,4 +309,38 @@ public class TestActionEvaluation {
         """;
     isTrace(spec, Map.of("x", 0, "y", 0));
   }
+
+  private static void stepThroughActions(String spec, String... actions) {
+    try (IOCapture io = new IOCapture()) {
+      Interpreter i = new Interpreter(true);
+      i.interpret(parse(spec));
+
+      for (String actionName : actions) {
+        Stmt.Print action = parseAction(actionName);
+        List<Map<String, Object>> nextStates = i.getNextStates(action.location, action.expression, false);
+        assertEquals(1, nextStates.size());
+        i.goToState(nextStates.get(0));
+      }
+    }
+  }
+
+  private static boolean hasTraceError(String spec, String... actions) {
+    try {
+      stepThroughActions(spec, actions);
+    } catch (RuntimeError e) {
+      return true;
+    }
+
+    return false;
+  }
+
+  @Test
+  public void testPrimeInInitialStateError() {
+    assertTrue(hasTraceError("VARIABLE x", "x' = 0"));
+  }
+
+  @Test
+  public void testDoublePrimeError() {
+    assertTrue(hasTraceError("VARIABLE x", "x = 0", "(x')' = 1"));
+  }
 }

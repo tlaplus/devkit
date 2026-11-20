@@ -3,9 +3,49 @@
 Remember way back at the start of the [[creating:operators|Functions, Operators, and Parameters]] chapter when operators were described as being like macros?
 This was very literal - the expressions provided as parameters to an operator should be substituted into the operator body itself, //then// evaluated.
 Instead, we evaluated the operator parameters first, //then// substituted the resulting values into the operator body.
-This didn't matter before implementing the prime operator, but
+This didn't matter before implementing the prime operator, but now it does!
+Consider the spec:
+<code haskell>
+VARIABLE x
+Init == x = 0
+Increment(v) == v' = v + 1
+Next == Increment(x)
+</code>
 
-TODO
+With our current operator evaluation method, ''Increment(x)'' sees ''x'' evaluated //before// being passed in, so it becomes ''Increment(0)'' and then ''0' = 0 + 1'' which is just ''0 = 1'', or ''FALSE''.
+Thus this spec deadlocks after the initial state instead of repeatedly incrementing, as it should.
+
+How can we ensure operator arguments are evaluated after being placed in the operator body, instead of when they are passed in?
+Taking a look at our current implementation of ''visitVariableExpr()'' in the ''Interpreter'' class we see:
+<code java>
+    List<Object> arguments = new ArrayList<>();
+    for (Expr argument : expr.arguments) {
+      arguments.add(evaluate(argument));
+    }
+
+    // (some validation code omitted)
+
+    return operator.call(this, arguments);
+</code>
+So ''evaluate(argument)'' is being called before passing the arguments in to ''operator.call(this, arguments)''.
+Can we just pass in the un-evaluated ''Expr''-type arguments to ''operator.call()'', then?
+Even if we could get the type-checking to work out, unfortunately we run into the problem that these arguments might refer to identifiers that no longer have any definition once evaluated within the operator.
+Consider:
+<code haskell>
+Set(var, val) == var' = val
+IncremementBy(v, c) == Set(v, v + c)
+</code>
+When ''IncrementBy(v, c)'' calls ''Set(v, v + c)'', delaying argument evaluation makes this expand in the body of ''Set(var, val)'' to ''v' = v + c''.
+But then what is ''v'' and what is ''c'' in that context?
+Neither of those variables are in-scope in the body of ''Set(var, val)''!
+So we arrive at the idea of //closures// as presented in [[https://craftinginterpreters.com/functions.html#local-functions-and-closures|Section 10.6]] of //Crafting Interpreters//.
+Read through that section now.
+The trick we'll use here - a bit different from the book - is automatically turning operator arguments into zero-arity closures.
+In formal language design, these are whimsically called //[[https://en.wikipedia.org/wiki/Thunk|thunks]]// and are a classic way to implement call-by-name argument semantics where evaluation of arguments is delayed until after they are placed in the operator body.
+
+====== Section 10.6: Local Functions and Closures ======
+
+To implement thunks, we will first follow along with [[https://craftinginterpreters.com/functions.html#local-functions-and-closures|Section 10.6]] of the book to implement closures.
 
 [[creating:safety|< Previous Page]] | [[creating:start#table_of_contents|Table of Contents]]
 

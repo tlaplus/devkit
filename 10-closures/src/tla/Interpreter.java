@@ -113,7 +113,7 @@ class Interpreter implements Expr.Visitor<Object>,
       throw new RuntimeError(stmt.name, "State variable redeclared as operator.");
     }
 
-    TlaOperator op = new TlaOperator(stmt);
+    TlaOperator op = new TlaOperator(stmt, environment);
     environment.define(stmt.name, op);
     return null;
   }
@@ -277,7 +277,9 @@ class Interpreter implements Expr.Visitor<Object>,
 
     List<Object> arguments = new ArrayList<>();
     for (Expr argument : expr.arguments) {
-      arguments.add(evaluate(argument));
+      Stmt.OpDef lambda = new Stmt.OpDef(null, new ArrayList<>(), argument);
+      TlaCallable thunk = new TlaOperator(lambda, this.environment);
+      arguments.add(thunk);
     }
 
     TlaCallable operator = (TlaCallable)callee;
